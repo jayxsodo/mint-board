@@ -656,6 +656,7 @@
     <div class="stat-chip">块高: <b id="blockHeight">—</b></div>
     <div class="stat-chip">延迟: <b id="rpcLatency">— ms</b></div>
     <div class="stat-chip">BNB 现价: <b id="bnbPriceUsd" style="color:var(--amber)">$—</b></div>
+    <div class="stat-chip" id="syncStatusChip">同步: <b id="syncStatusText" style="color:var(--blue)">连接清单中...</b></div>
   </div>
 
   <div class="top-actions">
@@ -991,8 +992,12 @@
       </div>
       <div class="form-group">
         <label>发售进度函数名 (可空)</label>
-        <input type="text" id="mProjProgressFn" placeholder="例如: sold() 或 sharesSold()">
+        <input type="text" id="mProjProgressFn" placeholder="例如: sold 或 sharesSold">
       </div>
+    </div>
+    <div class="form-group">
+      <label>开盘判断函数名 (可空)</label>
+      <input type="text" id="mProjOpenedFn" placeholder="例如: opened 或 launched">
     </div>
     <div class="modal-footer">
       <button class="btn-sm btn-secondary" id="btnDeleteProject" style="background:#3b1219; color:#fca5a5; display:none">删除此项目</button>
@@ -1173,6 +1178,26 @@ function getSelector(sig) {
   return keccak256(sig).slice(0, 10);
 }
 
+function normalizeFn(fn) {
+  if (!fn || !fn.trim()) return "";
+  let s = fn.trim();
+  if (!s.includes("(")) s += "()";
+  return s;
+}
+
+function parseTimestamp(dateStr) {
+  if (!dateStr) return 0;
+  if (typeof dateStr === "number") return dateStr;
+  const s = String(dateStr).trim();
+  if (s.includes("T")) {
+    const t = new Date(s).getTime();
+    if (!isNaN(t)) return t;
+  }
+  const normalized = s.replace(/-/g, "/");
+  const t = new Date(normalized).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
 function padAddress(addr) {
   return (addr || "").toLowerCase().replace(/^0x/, "").padStart(64, "0");
 }
@@ -1279,78 +1304,170 @@ const DEFAULT_PROJECTS = [
     id: "dogeking",
     name: "DogeKing 狗王",
     token: "0xaB36C1C92a3De7462b91306c63C63A4bD5317972",
+    sale: "0xd73A0cDCe58e07D8e2a38EE771Cc3aBC45B6FA45",
     presale: "0xd73A0cDCe58e07D8e2a38EE771Cc3aBC45B6FA45",
     pricePerShare: 0.002,
     tokensPerShare: 1000000,
     totalShares: 10000,
+    taxPct: 0,
     sellTax: 0.0,
-    launchTime: "2026-11-10 19:00",
-    endTime: "2026-12-10 19:00",
+    startAt: "2026-11-10T19:00:00+08:00",
+    launchTime: "2026-11-10T19:00:00+08:00",
+    endAt: "2026-12-10T19:00:00+08:00",
+    endTime: "2026-12-10T19:00:00+08:00",
     heldShares: 0,
-    progressFn: "sold()",
-    manualSold: 0
+    progressFn: "sold",
+    openedFn: "",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
   },
   {
     id: "gout",
     name: "GOUT",
     token: "0xd4B9BFd03c19c0ac0dd3578Be7A5cabD07A27772",
+    sale: "0x3246Ca2024DC2B17BF1c6Bc4aCD9E69293CECDBB",
     presale: "0x3246Ca2024DC2B17BF1c6Bc4aCD9E69293CECDBB",
     pricePerShare: 0.002,
     tokensPerShare: 50000000,
     totalShares: 10000,
+    taxPct: 2.0,
     sellTax: 2.0,
-    launchTime: "2026-11-10 18:00",
-    endTime: "2026-11-11 18:00",
+    startAt: "2026-11-10T18:00:00+08:00",
+    launchTime: "2026-11-10T18:00:00+08:00",
+    endAt: "2026-11-11T18:00:00+08:00",
+    endTime: "2026-11-11T18:00:00+08:00",
     heldShares: 0,
-    progressFn: "totalMinted()",
-    manualSold: 0
+    progressFn: "totalMinted",
+    openedFn: "opened",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
   },
   {
     id: "akita",
     name: "AKITA",
     token: "0xf6720636bDfBe84973a487A9e70A5408F94f6029",
+    sale: "0xEC8E6ab3adf02F4002E9f0dba0A528c55e99b19c",
     presale: "0xEC8E6ab3adf02F4002E9f0dba0A528c55e99b19c",
     pricePerShare: 0.002,
     tokensPerShare: 60000000,
     totalShares: 10000,
+    taxPct: 2.0,
     sellTax: 2.0,
-    launchTime: "2026-11-10 20:00",
-    endTime: "2026-11-11 20:00",
+    startAt: "2026-11-10T20:00:00+08:00",
+    launchTime: "2026-11-10T20:00:00+08:00",
+    endAt: "2026-11-11T20:00:00+08:00",
+    endTime: "2026-11-11T20:00:00+08:00",
     heldShares: 0,
-    progressFn: "totalMinted()",
-    manualSold: 0
+    progressFn: "totalMinted",
+    openedFn: "launched",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
   },
   {
     id: "whale",
     name: "WHALE 鲸鱼",
     token: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
+    sale: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
     presale: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
     pricePerShare: 0.003,
     tokensPerShare: 36000000,
     totalShares: 7167,
+    taxPct: 2.0,
     sellTax: 2.0,
-    launchTime: "2026-11-10 20:00",
-    endTime: "2026-11-11 20:00",
+    startAt: "2026-11-10T20:00:00+08:00",
+    launchTime: "2026-11-10T20:00:00+08:00",
+    endAt: "2026-11-11T20:00:00+08:00",
+    endTime: "2026-11-11T20:00:00+08:00",
     heldShares: 0,
-    progressFn: "sharesSold()",
-    manualSold: 0
+    progressFn: "sharesSold",
+    openedFn: "",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
   },
   {
     id: "broccoli",
     name: "Broccoli 西兰花",
     token: "0xc438821D5937E5246a50f877311a74e40f82eB87",
+    sale: "0xc438821D5937E5246a50f877311a74e40f82eB87",
     presale: "0xc438821D5937E5246a50f877311a74e40f82eB87",
     pricePerShare: 0.003,
     tokensPerShare: 30000000,
     totalShares: 11000,
+    taxPct: 3.5,
     sellTax: 3.5,
-    launchTime: "2026-11-10 22:00",
-    endTime: "2026-11-11 22:00",
+    startAt: "2026-11-10T22:00:00+08:00",
+    launchTime: "2026-11-10T22:00:00+08:00",
+    endAt: "2026-11-11T22:00:00+08:00",
+    endTime: "2026-11-11T22:00:00+08:00",
     heldShares: 0,
-    progressFn: "totalMinted()",
-    manualSold: 0
+    progressFn: "totalMinted",
+    openedFn: "opened",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
   }
 ];
+
+const PRESET_TOKEN_MAPPING = {
+  "0xab36c1c92a3de7462b91306c63c63a4bd5317972": { id: "dogeking", progressFn: "sold", openedFn: "" },
+  "0xd4b9bfd03c19c0ac0dd3578be7a5cabd07a27772": { id: "gout", progressFn: "totalMinted", openedFn: "opened" },
+  "0xf6720636bdfbe84973a487a9e70a5408f94f6029": { id: "akita", progressFn: "totalMinted", openedFn: "launched" },
+  "0xdd5cc8755d8af6539dcfd73de31e07794bfdd30a": { id: "whale", progressFn: "sharesSold", openedFn: "" },
+  "0xc438821d5937e5246a50f877311a74e40f82eb87": { id: "broccoli", progressFn: "totalMinted", openedFn: "opened" }
+};
+
+function normalizeProject(p) {
+  if (!p) return;
+  const tokenLower = (p.token || "").toLowerCase();
+  const preset = PRESET_TOKEN_MAPPING[tokenLower];
+
+  if (preset) {
+    if (!p.id || p.id !== preset.id) p.id = preset.id;
+    if (!p.source) p.source = "sync";
+    if (!p.progressFn) p.progressFn = preset.progressFn;
+    if (p.openedFn === undefined) p.openedFn = preset.openedFn;
+  } else {
+    if (!p.source) p.source = "manual";
+  }
+
+  p.sale = p.sale || p.presale || "";
+  p.presale = p.sale;
+  p.taxPct = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
+  p.sellTax = p.taxPct;
+  p.startAt = p.startAt || p.launchTime || "";
+  p.launchTime = p.startAt;
+  p.endAt = p.endAt || p.endTime || "";
+  p.endTime = p.endAt;
+  p.heldShares = p.heldShares || 0;
+  p.manualSold = p.manualSold || 0;
+
+  if (!p.state) {
+    p.state = {
+      openedLatched: false,
+      openedAt: null,
+      soldHighWater: 0,
+      lastGood: null
+    };
+  }
+
+  // Migrate legacy openKey if present
+  try {
+    const legacyOpen = localStorage.getItem(`mint_pool_first_open_${p.id}`);
+    if (legacyOpen) {
+      p.state.openedLatched = true;
+      if (!p.state.openedAt) p.state.openedAt = parseInt(legacyOpen);
+    }
+  } catch (e) {}
+}
 
 let projects = [];
 let activeProjectIdx = 0;
@@ -1375,12 +1492,17 @@ function loadStorage() {
     const pStr = localStorage.getItem("mint_board_projects");
     if (pStr) {
       projects = JSON.parse(pStr);
+      if (Array.isArray(projects) && projects.length > 0) {
+        projects.forEach(normalizeProject);
+      } else {
+        projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
+      }
     } else {
-      projects = DEFAULT_PROJECTS;
-      saveProjects();
+      projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
     }
+    saveProjects();
   } catch (e) {
-    projects = DEFAULT_PROJECTS;
+    projects = JSON.parse(JSON.stringify(DEFAULT_PROJECTS));
   }
 
   try {
@@ -1410,6 +1532,131 @@ function loadStorage() {
       document.getElementById("simModeToggle").checked = simulationMode;
     }
   } catch (e) {}
+}
+
+function applySyncedProjects(manifestProjects) {
+  const manifestMap = new Map();
+  manifestProjects.forEach(m => {
+    if (m && m.id) manifestMap.set(m.id, m);
+  });
+
+  // 1. Detect closed/archived sync projects
+  const remaining = [];
+  for (const p of projects) {
+    if (p.source === "sync" && !manifestMap.has(p.id)) {
+      // Stop and reset any running bots on this project
+      bots.forEach(b => {
+        if (b.projectId === p.id) {
+          if (b.status === "RUNNING") stopBot(b);
+          b.status = "STOPPED";
+        }
+      });
+      saveBots();
+      renderBotTable();
+      addLog("SYS", `项目已结案，已自动移除: ${p.name}`, p.id);
+    } else {
+      remaining.push(p);
+    }
+  }
+  projects = remaining;
+
+  // 2. Add or update sync projects from manifest
+  for (const m of manifestProjects) {
+    const existing = projects.find(p => p.id === m.id);
+    if (existing) {
+      // Update manifest fields, strictly preserving user local fields (heldShares, bots, state)
+      existing.name = m.name;
+      existing.token = m.token;
+      existing.sale = m.sale || m.presale || existing.sale;
+      existing.presale = existing.sale;
+      existing.pricePerShare = m.pricePerShare;
+      existing.tokensPerShare = m.tokensPerShare;
+      existing.totalShares = m.totalShares;
+      existing.taxPct = m.taxPct !== undefined ? m.taxPct : (m.sellTax || 0);
+      existing.sellTax = existing.taxPct;
+      existing.startAt = m.startAt || m.launchTime || existing.startAt;
+      existing.launchTime = existing.startAt;
+      existing.endAt = m.endAt || m.endTime || existing.endAt;
+      existing.endTime = existing.endAt;
+      existing.progressFn = m.progressFn !== undefined ? m.progressFn : existing.progressFn;
+      existing.openedFn = m.openedFn !== undefined ? m.openedFn : existing.openedFn;
+      existing.note = m.note !== undefined ? m.note : existing.note;
+      existing.source = "sync";
+
+      if (!existing.state) {
+        existing.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
+      }
+    } else {
+      const newProj = {
+        id: m.id,
+        name: m.name,
+        token: m.token,
+        sale: m.sale || m.presale || "",
+        presale: m.sale || m.presale || "",
+        pricePerShare: m.pricePerShare || 0,
+        tokensPerShare: m.tokensPerShare || 0,
+        totalShares: m.totalShares || 10000,
+        taxPct: m.taxPct !== undefined ? m.taxPct : (m.sellTax || 0),
+        sellTax: m.taxPct !== undefined ? m.taxPct : (m.sellTax || 0),
+        startAt: m.startAt || m.launchTime || "",
+        launchTime: m.startAt || m.launchTime || "",
+        endAt: m.endAt || m.endTime || "",
+        endTime: m.endAt || m.endTime || "",
+        progressFn: m.progressFn || "",
+        openedFn: m.openedFn || "",
+        note: m.note || "",
+        heldShares: 0,
+        manualSold: 0,
+        source: "sync",
+        state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
+      };
+      projects.push(newProj);
+      addLog("SYS", `新增同步项目 [${newProj.name}] (ID: ${newProj.id})`, newProj.id);
+    }
+  }
+
+  if (activeProjectIdx >= projects.length) {
+    activeProjectIdx = Math.max(0, projects.length - 1);
+  }
+
+  saveProjects();
+  renderProjectTabs();
+}
+
+let lastSyncSuccessTime = null;
+let lastSyncCount = 0;
+
+async function syncProjectsManifest() {
+  const syncEl = document.getElementById("syncStatusText");
+  try {
+    const res = await fetch(`./projects.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (!data || !Array.isArray(data.projects)) {
+      throw new Error("清单数据缺少 projects 数组");
+    }
+
+    applySyncedProjects(data.projects);
+
+    lastSyncSuccessTime = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    lastSyncCount = data.projects.length;
+
+    if (syncEl) {
+      syncEl.textContent = `${lastSyncSuccessTime} (${lastSyncCount}个)`;
+      syncEl.style.color = "var(--green)";
+      syncEl.title = `最后同步成功时间: ${lastSyncSuccessTime}，清单项目数: ${lastSyncCount}`;
+    }
+  } catch (err) {
+    console.warn("Manifest sync failure:", err);
+    if (syncEl) {
+      syncEl.textContent = "同步失败，沿用本地列表";
+      syncEl.style.color = "var(--amber)";
+      syncEl.title = `同步失败: ${err.message}`;
+    }
+    addLog("ERROR", `项目清单同步失败，沿用本地列表: ${err.message}`);
+  }
 }
 
 function saveProjects() {
@@ -1530,11 +1777,15 @@ async function updateBnbUsdPrice() {
 
 // Read Presale Sold Shares
 async function readPresaleSoldShares(p) {
+  const contractAddr = p.sale || p.presale;
+  if (!contractAddr) {
+    return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "无合约" };
+  }
+
   if (p.progressFn && p.progressFn.trim()) {
-    let fn = p.progressFn.trim();
-    if (!fn.includes("(")) fn += "()";
+    const fn = normalizeFn(p.progressFn);
     const selector = getSelector(fn);
-    const { result } = await ethCall(p.presale, selector);
+    const { result } = await ethCall(contractAddr, selector);
     if (result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -1546,8 +1797,9 @@ async function readPresaleSoldShares(p) {
   // Probe candidates if progressFn didn't work
   const candidates = ["sold()", "sharesSold()", "totalMinted()", "totalSold()", "minted()"];
   for (const cand of candidates) {
+    if (p.progressFn && normalizeFn(p.progressFn) === cand) continue;
     const sel = getSelector(cand);
-    const { result } = await ethCall(p.presale, sel);
+    const { result } = await ethCall(contractAddr, sel);
     if (result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -1556,7 +1808,41 @@ async function readPresaleSoldShares(p) {
     }
   }
 
-  return { success: false, sold: p.manualSold || 0, source: "手动录入" };
+  return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" };
+}
+
+// Check Presale Opened Function
+async function checkPresaleOpened(p) {
+  const contractAddr = p.sale || p.presale;
+  if (!contractAddr) return false;
+
+  if (p.openedFn && p.openedFn.trim()) {
+    const fn = normalizeFn(p.openedFn);
+    const selector = getSelector(fn);
+    const { result } = await ethCall(contractAddr, selector);
+    if (result && result !== "0x") {
+      try {
+        const val = BigInt(result);
+        if (val > 0n) return true;
+      } catch (e) {}
+    }
+  }
+
+  // Probe candidates if openedFn didn't work or not configured
+  const candidates = ["opened()", "launched()", "isOpen()", "isOpened()"];
+  for (const cand of candidates) {
+    if (p.openedFn && normalizeFn(p.openedFn) === cand) continue;
+    const sel = getSelector(cand);
+    const { result } = await ethCall(contractAddr, sel);
+    if (result && result !== "0x") {
+      try {
+        const val = BigInt(result);
+        if (val > 0n) return true;
+      } catch (e) {}
+    }
+  }
+
+  return false;
 }
 
 // Quote Pancake Router getAmountsOut
@@ -1578,8 +1864,52 @@ async function quoteSell(amountInRaw, tokenAddr) {
 }
 
 // ==========================================
-// 6. UI RENDERING & PROJECT TAB SWITCHING
+// 6. UI RENDERING & STATUS PRIORITY ENGINE
 // ==========================================
+function determineProjectStatus(p, timeStatus, liveEvidence = {}) {
+  const totalCount = p.totalShares || 10000;
+  const highWater = (p.state && p.state.soldHighWater) || 0;
+  const currentSold = liveEvidence.sold !== undefined ? liveEvidence.sold : highWater;
+  const isSoldOut = currentSold >= totalCount || highWater >= totalCount;
+
+  // 1. Highest Priority: openedLatched
+  if (p.state && p.state.openedLatched) {
+    return { status: "已开盘", badgeClass: "badge-opened" };
+  }
+
+  // 2. Live On-chain Evidence
+  if (liveEvidence.isPoolActive || liveEvidence.isOpenedFn || currentSold >= totalCount) {
+    return { status: "已开盘", badgeClass: "badge-opened" };
+  }
+
+  // 3. Sold Out (via high water mark)
+  if (isSoldOut) {
+    return { status: "已售罄", badgeClass: "badge-soldout" };
+  }
+
+  // 4. In Sale Schedule
+  if (timeStatus === "已开始") {
+    return { status: "发售中", badgeClass: "badge-selling" };
+  }
+
+  // 5. Default: Not Started
+  return { status: "未开盘", badgeClass: "badge-unopened" };
+}
+
+function updateStatusBadges(p, statusBadgeText, badgeClass) {
+  p.statusBadge = statusBadgeText;
+  const cardBadge = document.getElementById("cardAStatusBadge");
+  if (cardBadge) {
+    cardBadge.textContent = statusBadgeText;
+    cardBadge.className = `tab-badge ${badgeClass}`;
+  }
+  const tabBadge = document.getElementById(`tabBadge_${p.id}`);
+  if (tabBadge) {
+    tabBadge.textContent = statusBadgeText;
+    tabBadge.className = `tab-badge ${badgeClass}`;
+  }
+}
+
 function renderProjectTabs() {
   const container = document.getElementById("projectTabs");
   container.innerHTML = "";
@@ -1588,21 +1918,17 @@ function renderProjectTabs() {
     tab.className = `project-tab ${idx === activeProjectIdx ? "active" : ""}`;
     tab.onclick = () => selectProject(idx);
 
-    // badge
-    let badgeClass = "badge-unopened";
-    let badgeText = "未开盘";
-    if (p.statusBadge) {
-      badgeText = p.statusBadge;
-      if (badgeText === "已开盘") badgeClass = "badge-opened";
-      else if (badgeText === "发售中") badgeClass = "badge-selling";
-      else if (badgeText === "已售罄") badgeClass = "badge-soldout";
-      else if (badgeText === "读取失败") badgeClass = "badge-failed";
-    }
+    const launchTs = parseTimestamp(p.startAt || p.launchTime);
+    const timeStatus = (launchTs && Date.now() >= launchTs) ? "已开始" : "未开始";
+    const statusInfo = determineProjectStatus(p, timeStatus);
+    p.statusBadge = statusInfo.status;
+
+    const sourceTag = p.source === "manual" ? `<span style="font-size:9.5px; opacity:0.6; margin-left:2px" title="本地手动添加">自</span>` : "";
 
     tab.innerHTML = `
       <span class="kbd-key">${idx + 1}</span>
-      <span>${escapeHtml(p.name)}</span>
-      <span class="tab-badge ${badgeClass}" id="tabBadge_${p.id}">${badgeText}</span>
+      <span>${escapeHtml(p.name)}${sourceTag}</span>
+      <span class="tab-badge ${statusInfo.badgeClass}" id="tabBadge_${p.id}">${statusInfo.status}</span>
     `;
     container.appendChild(tab);
   });
@@ -1623,6 +1949,142 @@ window.addEventListener("keydown", (e) => {
     selectProject(num - 1);
   }
 });
+
+// Render Card A: Presale Progress
+function renderProgressCard(p, soldCount, totalCount, isSnapshot, statusSourceText) {
+  const pct = Math.min(Math.max((soldCount / totalCount) * 100, 0), 100);
+  document.getElementById("sharesSoldNum").textContent = soldCount.toLocaleString();
+  document.getElementById("totalSharesNum").textContent = totalCount.toLocaleString();
+  document.getElementById("sharesSoldPct").textContent = `${pct.toFixed(1)}%`;
+  document.getElementById("progressBarFill").style.width = `${pct}%`;
+  document.getElementById("sharesRemaining").textContent = Math.max(totalCount - soldCount, 0).toLocaleString();
+  
+  const fnLabel = p.progressFn || "视图函数";
+  const saleAddr = p.sale || p.presale || "";
+  document.getElementById("presaleReadSource").textContent = saleAddr ? `${saleAddr.slice(0, 10)}...${saleAddr.slice(-8)} · [${fnLabel}]` : "—";
+  
+  const statusEl = document.getElementById("progressReadStatusText");
+  if (isSnapshot) {
+    const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+    statusEl.textContent = snapTs ? `暂时读不到链上，显示上次数据 (数据于 ${snapTs})` : "暂时读不到链上，显示高水位数据";
+    statusEl.style.color = "var(--amber)";
+  } else {
+    statusEl.textContent = statusSourceText || "链上成功读取";
+    statusEl.style.color = "var(--text-dim)";
+  }
+}
+
+// Render Card B: Price & Returns
+function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, isSnapshot) {
+  const poolBadge = document.getElementById("poolStatusBadge");
+  const banner = document.getElementById("strategyPrompt");
+
+  if (curPrice > 0) {
+    document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} BNB`;
+    const curPriceUsd = curPrice * bnbUsdPrice;
+    const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+    const snapText = isSnapshot && snapTs ? ` (数据于 ${snapTs})` : "";
+    document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})${snapText}`;
+
+    const taxPct = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
+    const nomMult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
+    const taxDeduct = 1 - (taxPct / 100);
+    const netMult = nomMult * taxDeduct;
+
+    const nomEl = document.getElementById("nominalMultiple");
+    nomEl.textContent = `${nomMult.toFixed(2)}x`;
+    nomEl.className = `multiple-pill ${nomMult >= 1 ? "mult-pos" : "mult-neg"}`;
+
+    const netEl = document.getElementById("netMultiple");
+    netEl.textContent = `${netMult.toFixed(2)}x`;
+    netEl.className = `multiple-pill ${netMult >= 1 ? "mult-pos" : "mult-neg"}`;
+
+    // 1 Share Return (net)
+    const oneShareBnb = (p.tokensPerShare || 0) * curPrice * taxDeduct;
+    const oneShareUsd = oneShareBnb * bnbUsdPrice;
+    document.getElementById("oneShareReturnVal").textContent = `${oneShareBnb.toFixed(4)} BNB ($${oneShareUsd.toFixed(1)})`;
+
+    // My PnL
+    const held = p.heldShares || 0;
+    if (held > 0) {
+      const curValBnb = held * (p.tokensPerShare || 0) * curPrice * taxDeduct;
+      const costBnb = held * (p.pricePerShare || 0);
+      const pnlBnb = curValBnb - costBnb;
+      const pnlPct = costBnb > 0 ? (pnlBnb / costBnb * 100) : 0;
+      const isProf = pnlBnb >= 0;
+      document.getElementById("unrealizedPnlVal").innerHTML = `<span style="color:${isProf ? 'var(--green)' : 'var(--red)'}">${isProf ? '+' : ''}${pnlBnb.toFixed(4)} BNB (${pnlPct.toFixed(1)}%)</span>`;
+    } else {
+      document.getElementById("unrealizedPnlVal").textContent = "0.0000 BNB";
+    }
+
+    poolBadge.textContent = "已开盘";
+    poolBadge.className = "tab-badge badge-opened";
+
+    const resTokStr = tokNorm > 1e9 ? (tokNorm/1e9).toFixed(2)+'B' : (tokNorm/1e6).toFixed(2)+'M';
+    const snapResNotice = isSnapshot ? `<span style="color:var(--amber); font-size:11px"> (快照)</span>` : "";
+    document.getElementById("poolReservesSummary").innerHTML = `${wbnbNorm.toFixed(2)} WBNB / ${resTokStr} ${escapeHtml(symbol)}${snapResNotice}`;
+
+    if (p.state && p.state.openedAt) {
+      const durationHours = (Date.now() - p.state.openedAt) / 3600000;
+      document.getElementById("poolDuration").textContent = durationHours >= 1 ? `${durationHours.toFixed(1)} 小时` : `${Math.floor(durationHours * 60)} 分钟`;
+    } else {
+      document.getElementById("poolDuration").textContent = "—";
+    }
+
+    // Sparkline tracking
+    if (!isSnapshot) {
+      if (!priceHistory[p.id]) priceHistory[p.id] = [];
+      priceHistory[p.id].push({ price: curPrice, time: Date.now() });
+      if (priceHistory[p.id].length > 40) priceHistory[p.id].shift();
+      drawSparkline(priceHistory[p.id]);
+
+      const lastL = lastLogTime[p.id] || 0;
+      if (Date.now() - lastL >= 5000) {
+        lastLogTime[p.id] = Date.now();
+        const mult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
+        addLog("PRICE", `${p.name} 现价: ${curPrice.toExponential(4)} BNB (名义: ${mult.toFixed(2)}x)`, p.id);
+      }
+    }
+
+    // Strategy Prompt Banner
+    if (netMult >= 2.0) {
+      banner.className = "strategy-banner strat-alert-high";
+      banner.innerHTML = `🎯 <b>[提示]</b> 净倍数已达 <b>${netMult.toFixed(2)}x</b>，可考虑先卖回本部分锁定利润（提示非建议，请结合盘口自主决策）`;
+    } else if (netMult >= 1.5) {
+      banner.className = "strategy-banner strat-alert-mid";
+      banner.innerHTML = `💡 <b>[提示]</b> 净倍数已达 <b>${netMult.toFixed(2)}x</b>，已覆盖成本且具备稳健收益，可考虑卖出（提示非建议）`;
+    } else if (netMult < 1.0) {
+      banner.className = "strategy-banner strat-alert-low";
+      banner.innerHTML = `⚠️ <b>[提示]</b> 当前价格低于基准发售价 (${netMult.toFixed(2)}x)，流动性偏薄，注意风险（提示非建议）`;
+    } else {
+      banner.className = "strategy-banner strat-alert-neutral";
+      banner.innerHTML = `📊 <b>[提示]</b> 当前净倍数 ${netMult.toFixed(2)}x，价格在成本区间上方平稳运行（提示非建议）`;
+    }
+
+  } else {
+    // curPrice <= 0
+    if (p.state && p.state.openedLatched) {
+      poolBadge.textContent = "已开盘";
+      poolBadge.className = "tab-badge badge-opened";
+      document.getElementById("poolReservesSummary").textContent = "已探明开盘 (等待储备读数)";
+    } else {
+      poolBadge.textContent = "无池/未开盘";
+      poolBadge.className = "tab-badge badge-unopened";
+      document.getElementById("poolReservesSummary").textContent = "未创建流动池";
+    }
+    document.getElementById("curPriceBnb").textContent = "—";
+    document.getElementById("curPriceUsd").textContent = "($—)";
+    document.getElementById("nominalMultiple").textContent = "—x";
+    document.getElementById("nominalMultiple").className = "multiple-pill mult-neutral";
+    document.getElementById("netMultiple").textContent = "—x";
+    document.getElementById("netMultiple").className = "multiple-pill mult-neutral";
+    document.getElementById("oneShareReturnVal").textContent = "— BNB";
+    document.getElementById("unrealizedPnlVal").textContent = "—";
+    document.getElementById("poolDuration").textContent = (p.state && p.state.openedAt) ? `${Math.floor((Date.now() - p.state.openedAt) / 60000)} 分钟` : "—";
+    banner.className = "strategy-banner strat-alert-neutral";
+    banner.innerHTML = `💡 [提示] 该项目流动池未建立或无储备，等待发售完成上池`;
+  }
+}
 
 // ==========================================
 // 7. CORE TICK & DATA REFRESHING
@@ -1655,6 +2117,10 @@ async function refreshActiveProject() {
   const p = projects[activeProjectIdx];
   if (!p) return;
 
+  if (!p.state) {
+    p.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
+  }
+
   // Base price per token: pricePerShare / tokensPerShare
   const basePriceBnb = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
   document.getElementById("benchmarkPrice").textContent = `${basePriceBnb.toExponential(4)} BNB`;
@@ -1662,17 +2128,17 @@ async function refreshActiveProject() {
   document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
   const myCostBnb = (p.heldShares || 0) * (p.pricePerShare || 0);
   document.getElementById("myCostSummary").textContent = `份 = ${myCostBnb.toFixed(4)} BNB ($${(myCostBnb * bnbUsdPrice).toFixed(1)})`;
-  document.getElementById("sellProjectTax").textContent = `${p.sellTax || 0}%`;
+  document.getElementById("sellProjectTax").textContent = `${p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0)}%`;
 
   // Countdown & Time status
   const now = Date.now();
-  let launchTs = p.launchTime ? new Date(p.launchTime.replace(/-/g, "/")).getTime() : 0;
-  let endTs = p.endTime ? new Date(p.endTime.replace(/-/g, "/")).getTime() : 0;
+  const launchTs = parseTimestamp(p.startAt || p.launchTime);
+  const endTs = parseTimestamp(p.endAt || p.endTime);
 
   let timeStatus = "未开始";
   if (launchTs) {
     timeStatus = now >= launchTs ? "已开始" : "未开始";
-    document.getElementById("launchTimeStatus").textContent = `${p.launchTime} (${timeStatus})`;
+    document.getElementById("launchTimeStatus").textContent = `${p.startAt || p.launchTime} (${timeStatus})`;
   } else {
     document.getElementById("launchTimeStatus").textContent = "未设定";
   }
@@ -1691,172 +2157,115 @@ async function refreshActiveProject() {
     document.getElementById("countdownEnd").textContent = "—";
   }
 
-  // 1. Fetch Token Meta
-  const meta = await fetchTokenMeta(p.token);
+  // ==========================================
+  // [Revision 2 Fix]: Step 1 - Immediate First Render from Snapshot & Latch
+  // ==========================================
+  const totalCount = p.totalShares || 10000;
+  const initialHighWater = (p.state && p.state.soldHighWater) || 0;
+  const initialSold = Math.max(initialHighWater, p.state?.lastGood?.sold || 0, p.manualSold || 0);
+  const initialStatus = determineProjectStatus(p, timeStatus);
+  updateStatusBadges(p, initialStatus.status, initialStatus.badgeClass);
 
-  // 2. Fetch Pair & Reserves
-  const pairAddr = await fetchPairAddress(p.token);
+  if (p.state?.lastGood && p.state.lastGood.price > 0) {
+    renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceBnb, true);
+    renderProgressCard(p, initialSold, totalCount, true, null);
+  } else {
+    renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false);
+    renderProgressCard(p, initialSold, totalCount, false, p.manualSold ? "手动录入" : "等待链上读取");
+  }
+
+  // ==========================================
+  // Step 2 - Async On-Chain Query
+  // ==========================================
+  let liveEvidence = {};
   let curPrice = 0;
   let isPoolActive = false;
+  let wbnbNorm = 0;
+  let tokNorm = 0;
+  let meta = { symbol: "TOKEN", decimals: 18 };
+  let soldInfo = { success: false, sold: initialSold, source: "未读取" };
+  let fetchFailed = false;
 
-  if (pairAddr) {
-    document.getElementById("pairBscScanLink").href = `https://bscscan.com/address/${pairAddr}`;
-    document.getElementById("pairBscScanLink").style.display = "inline";
-    const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
+  try {
+    meta = await fetchTokenMeta(p.token);
 
-    if (tokenReserve > 0n && wbnbReserve > 0n) {
-      isPoolActive = true;
-      const wbnbNorm = Number(wbnbReserve) / 1e18;
-      const tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
-      curPrice = wbnbNorm / tokNorm;
+    const pairAddr = await fetchPairAddress(p.token);
+    if (pairAddr) {
+      document.getElementById("pairBscScanLink").href = `https://bscscan.com/address/${pairAddr}`;
+      document.getElementById("pairBscScanLink").style.display = "inline";
+      const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
 
-      document.getElementById("poolStatusBadge").textContent = "已开盘";
-      document.getElementById("poolStatusBadge").className = "tab-badge badge-opened";
-      document.getElementById("poolReservesSummary").textContent = `${wbnbNorm.toFixed(2)} WBNB / ${tokNorm > 1e9 ? (tokNorm/1e9).toFixed(2)+'B' : (tokNorm/1e6).toFixed(2)+'M'} ${meta.symbol}`;
-
-      // Track pair open duration in localStorage
-      const openKey = `mint_pool_first_open_${p.id}`;
-      let firstOpen = localStorage.getItem(openKey);
-      if (!firstOpen) {
-        firstOpen = Date.now();
-        localStorage.setItem(openKey, firstOpen);
-      }
-      const durationHours = (Date.now() - parseInt(firstOpen)) / 3600000;
-      document.getElementById("poolDuration").textContent = durationHours >= 1 ? `${durationHours.toFixed(1)} 小时` : `${Math.floor(durationHours * 60)} 分钟`;
-
-      // Sparkline tracking
-      if (!priceHistory[p.id]) priceHistory[p.id] = [];
-      priceHistory[p.id].push({ price: curPrice, time: Date.now() });
-      if (priceHistory[p.id].length > 40) priceHistory[p.id].shift();
-      drawSparkline(priceHistory[p.id]);
-
-      // Throttle log
-      const lastL = lastLogTime[p.id] || 0;
-      if (Date.now() - lastL >= 5000) {
-        lastLogTime[p.id] = Date.now();
-        const mult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
-        addLog("PRICE", `${p.name} 现价: ${curPrice.toExponential(4)} BNB (名义: ${mult.toFixed(2)}x)`, p.id);
+      if (tokenReserve > 0n && wbnbReserve > 0n) {
+        isPoolActive = true;
+        liveEvidence.isPoolActive = true;
+        wbnbNorm = Number(wbnbReserve) / 1e18;
+        tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
+        curPrice = wbnbNorm / tokNorm;
       }
     } else {
-      document.getElementById("poolStatusBadge").textContent = "无储备/未开盘";
-      document.getElementById("poolStatusBadge").className = "tab-badge badge-unopened";
-      document.getElementById("poolReservesSummary").textContent = "0 WBNB / 0 代币";
-      document.getElementById("poolDuration").textContent = "—";
+      document.getElementById("pairBscScanLink").style.display = "none";
+    }
+
+    soldInfo = await readPresaleSoldShares(p);
+    if (soldInfo.success) {
+      liveEvidence.sold = soldInfo.sold;
+      p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+    }
+
+    const isOpenedFn = await checkPresaleOpened(p);
+    if (isOpenedFn) {
+      liveEvidence.isOpenedFn = true;
+    }
+
+  } catch (err) {
+    console.warn("Live on-chain query encountered error:", err);
+    fetchFailed = true;
+  }
+
+  // Latch opened status permanently if any evidence confirms opened
+  const soldForCheck = liveEvidence.sold !== undefined ? liveEvidence.sold : (p.state.soldHighWater || 0);
+  if (liveEvidence.isPoolActive || liveEvidence.isOpenedFn || soldForCheck >= totalCount) {
+    p.state.openedLatched = true;
+    if (!p.state.openedAt) {
+      p.state.openedAt = Date.now();
+    }
+  }
+
+  // Save latest good snapshot on successful on-chain data
+  if (curPrice > 0 || (soldInfo.success && !fetchFailed)) {
+    p.state.lastGood = {
+      price: curPrice > 0 ? curPrice : (p.state.lastGood?.price || 0),
+      sold: soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || p.state.soldHighWater),
+      poolWBNB: isPoolActive ? wbnbNorm : (p.state.lastGood?.poolWBNB || 0),
+      poolToken: isPoolActive ? tokNorm : (p.state.lastGood?.poolToken || 0),
+      symbol: meta.symbol,
+      decimals: meta.decimals,
+      ts: Date.now()
+    };
+    saveProjects();
+  }
+
+  // Derive final status with strict priority: openedLatched > live evidence > time table
+  const finalStatus = determineProjectStatus(p, timeStatus, liveEvidence);
+  updateStatusBadges(p, finalStatus.status, finalStatus.badgeClass);
+
+  // Render cards with live data or fallback snapshot
+  if (fetchFailed || (!isPoolActive && curPrice <= 0 && p.state.lastGood?.price > 0)) {
+    const effectiveSold = Math.max(p.state.soldHighWater || 0, p.state.lastGood?.sold || 0, p.manualSold || 0);
+    renderProgressCard(p, effectiveSold, totalCount, true, null);
+    if (p.state.lastGood && p.state.lastGood.price > 0) {
+      renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || meta.symbol, basePriceBnb, true);
+    } else {
+      renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
     }
   } else {
-    document.getElementById("pairBscScanLink").style.display = "none";
-    document.getElementById("poolStatusBadge").textContent = "无池/未开盘";
-    document.getElementById("poolStatusBadge").className = "tab-badge badge-unopened";
-    document.getElementById("poolReservesSummary").textContent = "未创建流动池";
-    document.getElementById("poolDuration").textContent = "—";
-  }
-
-  // Update Price, Multiples, PnL
-  if (curPrice > 0) {
-    document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} BNB`;
-    const curPriceUsd = curPrice * bnbUsdPrice;
-    document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})`;
-
-    const nomMult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
-    const taxDeduct = 1 - ((p.sellTax || 0) / 100);
-    const netMult = nomMult * taxDeduct;
-
-    const nomEl = document.getElementById("nominalMultiple");
-    nomEl.textContent = `${nomMult.toFixed(2)}x`;
-    nomEl.className = `multiple-pill ${nomMult >= 1 ? "mult-pos" : "mult-neg"}`;
-
-    const netEl = document.getElementById("netMultiple");
-    netEl.textContent = `${netMult.toFixed(2)}x`;
-    netEl.className = `multiple-pill ${netMult >= 1 ? "mult-pos" : "mult-neg"}`;
-
-    // 1 Share Return (net)
-    const oneShareBnb = (p.tokensPerShare || 0) * curPrice * taxDeduct;
-    const oneShareUsd = oneShareBnb * bnbUsdPrice;
-    document.getElementById("oneShareReturnVal").textContent = `${oneShareBnb.toFixed(4)} BNB ($${oneShareUsd.toFixed(1)})`;
-
-    // My PnL
-    const held = p.heldShares || 0;
-    if (held > 0) {
-      const curValBnb = held * (p.tokensPerShare || 0) * curPrice * taxDeduct;
-      const costBnb = held * (p.pricePerShare || 0);
-      const pnlBnb = curValBnb - costBnb;
-      const pnlPct = costBnb > 0 ? (pnlBnb / costBnb * 100) : 0;
-      const isProf = pnlBnb >= 0;
-      document.getElementById("unrealizedPnlVal").innerHTML = `<span style="color:${isProf ? 'var(--green)' : 'var(--red)'}">${isProf ? '+' : ''}${pnlBnb.toFixed(4)} BNB (${pnlPct.toFixed(1)}%)</span>`;
-    } else {
-      document.getElementById("unrealizedPnlVal").textContent = "0.0000 BNB";
-    }
-
-    // Strategy Prompt Banner
-    const banner = document.getElementById("strategyPrompt");
-    if (netMult >= 2.0) {
-      banner.className = "strategy-banner strat-alert-high";
-      banner.innerHTML = `🎯 <b>[提示]</b> 净倍数已达 <b>${netMult.toFixed(2)}x</b>，可考虑先卖回本部分锁定利润（提示非建议，请结合盘口自主决策）`;
-    } else if (netMult >= 1.5) {
-      banner.className = "strategy-banner strat-alert-mid";
-      banner.innerHTML = `💡 <b>[提示]</b> 净倍数已达 <b>${netMult.toFixed(2)}x</b>，已覆盖成本且具备稳健收益，可考虑卖出（提示非建议）`;
-    } else if (netMult < 1.0) {
-      banner.className = "strategy-banner strat-alert-low";
-      banner.innerHTML = `⚠️ <b>[提示]</b> 当前价格低于基准发售价 (${netMult.toFixed(2)}x)，流动性偏薄，注意风险（提示非建议）`;
-    } else {
-      banner.className = "strategy-banner strat-alert-neutral";
-      banner.innerHTML = `📊 <b>[提示]</b> 当前净倍数 ${netMult.toFixed(2)}x，价格在成本区间上方平稳运行（提示非建议）`;
-    }
-  } else {
-    document.getElementById("curPriceBnb").textContent = "—";
-    document.getElementById("curPriceUsd").textContent = "($—)";
-    document.getElementById("nominalMultiple").textContent = "—x";
-    document.getElementById("nominalMultiple").className = "multiple-pill mult-neutral";
-    document.getElementById("netMultiple").textContent = "—x";
-    document.getElementById("netMultiple").className = "multiple-pill mult-neutral";
-    document.getElementById("oneShareReturnVal").textContent = "— BNB";
-    document.getElementById("unrealizedPnlVal").textContent = "—";
-    document.getElementById("strategyPrompt").className = "strategy-banner strat-alert-neutral";
-    document.getElementById("strategyPrompt").innerHTML = `💡 [提示] 该项目流动池未建立或无储备，等待发售完成上池`;
-  }
-
-  // 3. Read Presale Progress
-  const soldInfo = await readPresaleSoldShares(p);
-  const soldCount = soldInfo.sold;
-  const totalCount = p.totalShares || 10000;
-  const pct = Math.min(Math.max((soldCount / totalCount) * 100, 0), 100);
-
-  document.getElementById("sharesSoldNum").textContent = soldCount.toLocaleString();
-  document.getElementById("totalSharesNum").textContent = totalCount.toLocaleString();
-  document.getElementById("sharesSoldPct").textContent = `${pct.toFixed(1)}%`;
-  document.getElementById("progressBarFill").style.width = `${pct}%`;
-  document.getElementById("sharesRemaining").textContent = Math.max(totalCount - soldCount, 0).toLocaleString();
-  document.getElementById("presaleReadSource").textContent = `${p.presale.slice(0, 10)}...${p.presale.slice(-8)} · [${soldInfo.source}]`;
-
-  // Status Badge Evaluation
-  let statusBadgeText = "未开盘";
-  if (isPoolActive) {
-    statusBadgeText = "已开盘";
-  } else if (pct >= 100) {
-    statusBadgeText = "已售罄";
-  } else if (timeStatus === "已开始" && pct < 100) {
-    statusBadgeText = "发售中";
-  } else if (!soldInfo.success && !p.manualSold) {
-    statusBadgeText = "待手动更新";
-  }
-  p.statusBadge = statusBadgeText;
-
-  const cardBadge = document.getElementById("cardAStatusBadge");
-  cardBadge.textContent = statusBadgeText;
-  if (statusBadgeText === "已开盘") cardBadge.className = "tab-badge badge-opened";
-  else if (statusBadgeText === "发售中") cardBadge.className = "tab-badge badge-selling";
-  else if (statusBadgeText === "已售罄") cardBadge.className = "tab-badge badge-soldout";
-  else cardBadge.className = "tab-badge badge-unopened";
-
-  const tabBadge = document.getElementById(`tabBadge_${p.id}`);
-  if (tabBadge) {
-    tabBadge.textContent = statusBadgeText;
-    tabBadge.className = cardBadge.className;
+    const finalSold = soldInfo.success ? soldInfo.sold : Math.max(p.state.soldHighWater || 0, p.manualSold || 0);
+    renderProgressCard(p, finalSold, totalCount, false, soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : "未能自动探通，需手动录入");
+    renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
   }
 
   // Manual box sync
   document.getElementById("manualSoldInput").value = p.manualSold || "";
-  document.getElementById("progressReadStatusText").textContent = soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : "未能自动探通，需手动录入";
 
   // 4. Update Card C Sell Token Balance
   await refreshSellCardBalance(p, meta);
@@ -2293,7 +2702,7 @@ function fillSellPanelWithPct(pctNum) {
 // ==========================================
 // Project Modal
 document.getElementById("btnAddProject").addEventListener("click", () => {
-  document.getElementById("modalProjectTitle").textContent = "添加打新项目";
+  document.getElementById("modalProjectTitle").textContent = "添加打新项目 (本地自定义)";
   document.getElementById("editProjectId").value = "";
   document.getElementById("mProjName").value = "";
   document.getElementById("mProjToken").value = "";
@@ -2306,6 +2715,7 @@ document.getElementById("btnAddProject").addEventListener("click", () => {
   document.getElementById("mProjEndTime").value = "";
   document.getElementById("mProjHeldShares").value = "0";
   document.getElementById("mProjProgressFn").value = "";
+  if (document.getElementById("mProjOpenedFn")) document.getElementById("mProjOpenedFn").value = "";
   document.getElementById("btnDeleteProject").style.display = "none";
   document.getElementById("projectModal").style.display = "flex";
 });
@@ -2313,19 +2723,20 @@ document.getElementById("btnAddProject").addEventListener("click", () => {
 document.getElementById("btnEditProject").addEventListener("click", () => {
   const p = projects[activeProjectIdx];
   if (!p) return;
-  document.getElementById("modalProjectTitle").textContent = "编辑打新项目";
+  document.getElementById("modalProjectTitle").textContent = `编辑打新项目 (${p.source === 'sync' ? '云端同步' : '本地自定义'})`;
   document.getElementById("editProjectId").value = p.id;
   document.getElementById("mProjName").value = p.name;
   document.getElementById("mProjToken").value = p.token;
-  document.getElementById("mProjPresale").value = p.presale;
+  document.getElementById("mProjPresale").value = p.sale || p.presale || "";
   document.getElementById("mProjPricePerShare").value = p.pricePerShare;
   document.getElementById("mProjTokensPerShare").value = p.tokensPerShare;
   document.getElementById("mProjTotalShares").value = p.totalShares;
-  document.getElementById("mProjSellTax").value = p.sellTax;
-  document.getElementById("mProjLaunchTime").value = p.launchTime || "";
-  document.getElementById("mProjEndTime").value = p.endTime || "";
+  document.getElementById("mProjSellTax").value = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
+  document.getElementById("mProjLaunchTime").value = p.startAt || p.launchTime || "";
+  document.getElementById("mProjEndTime").value = p.endAt || p.endTime || "";
   document.getElementById("mProjHeldShares").value = p.heldShares || 0;
   document.getElementById("mProjProgressFn").value = p.progressFn || "";
+  if (document.getElementById("mProjOpenedFn")) document.getElementById("mProjOpenedFn").value = p.openedFn || "";
   document.getElementById("btnDeleteProject").style.display = "inline-block";
   document.getElementById("projectModal").style.display = "flex";
 });
@@ -2343,20 +2754,33 @@ document.getElementById("btnSaveProject").addEventListener("click", () => {
     return;
   }
 
+  const existing = editId ? projects.find(item => item.id === editId) : null;
+  const source = existing ? (existing.source || "manual") : "manual";
+  const state = existing?.state ? existing.state : { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
+  const openedFn = document.getElementById("mProjOpenedFn") ? document.getElementById("mProjOpenedFn").value.trim() : "";
+
   const pObj = {
     id: editId || ("proj_" + Date.now()),
     name,
     token,
+    sale: presale,
     presale,
     pricePerShare: parseFloat(document.getElementById("mProjPricePerShare").value) || 0,
     tokensPerShare: parseFloat(document.getElementById("mProjTokensPerShare").value) || 0,
     totalShares: parseInt(document.getElementById("mProjTotalShares").value) || 10000,
+    taxPct: parseFloat(document.getElementById("mProjSellTax").value) || 0,
     sellTax: parseFloat(document.getElementById("mProjSellTax").value) || 0,
+    startAt: document.getElementById("mProjLaunchTime").value.trim(),
     launchTime: document.getElementById("mProjLaunchTime").value.trim(),
+    endAt: document.getElementById("mProjEndTime").value.trim(),
     endTime: document.getElementById("mProjEndTime").value.trim(),
     heldShares: parseInt(document.getElementById("mProjHeldShares").value) || 0,
     progressFn: document.getElementById("mProjProgressFn").value.trim(),
-    manualSold: editId ? (projects.find(item => item.id === editId)?.manualSold || 0) : 0
+    openedFn,
+    note: existing ? (existing.note || "") : "",
+    manualSold: existing ? (existing.manualSold || 0) : 0,
+    source,
+    state
   };
 
   if (editId) {
@@ -2371,13 +2795,24 @@ document.getElementById("btnSaveProject").addEventListener("click", () => {
   document.getElementById("projectModal").style.display = "none";
   renderProjectTabs();
   refreshActiveProject();
-  addLog("SYS", `项目 [${pObj.name}] 配置已保存`, pObj.id);
+  addLog("SYS", `项目 [${pObj.name}] 配置已保存 (${pObj.source === 'sync' ? '云端同步' : '本地自定义'})`, pObj.id);
 });
 
 document.getElementById("btnDeleteProject").addEventListener("click", () => {
   const editId = document.getElementById("editProjectId").value;
   if (!editId) return;
   if (confirm("确定要删除该项目吗？")) {
+    const toDel = projects.find(item => item.id === editId);
+    if (toDel) {
+      bots.forEach(b => {
+        if (b.projectId === toDel.id) {
+          if (b.status === "RUNNING") stopBot(b);
+          b.status = "STOPPED";
+        }
+      });
+      saveBots();
+      renderBotTable();
+    }
     projects = projects.filter(item => item.id !== editId);
     if (activeProjectIdx >= projects.length) activeProjectIdx = Math.max(0, projects.length - 1);
     saveProjects();
@@ -2410,6 +2845,9 @@ document.getElementById("importFileInput").addEventListener("change", (e) => {
     try {
       const parsed = JSON.parse(evt.target.result);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        parsed.forEach(p => {
+          normalizeProject(p);
+        });
         projects = parsed;
         saveProjects();
         renderProjectTabs();
@@ -2608,6 +3046,7 @@ document.getElementById("btnDeleteBot").addEventListener("click", () => {
 // Manual Refresh Button
 document.getElementById("btnRefresh").addEventListener("click", async () => {
   addLog("SYS", "用户触发手动刷新...");
+  await syncProjectsManifest();
   await refreshTopBar();
   await refreshActiveProject();
 });
@@ -2620,6 +3059,9 @@ renderProjectTabs();
 renderBotTable();
 refreshTopBar();
 refreshActiveProject();
+
+// Immediately trigger manifest sync on page load
+syncProjectsManifest();
 
 addLog("SYS", "Agent 打新交互看板已加载完成。纯原生 RPC 引擎就绪。");
 
@@ -2634,11 +3076,17 @@ setInterval(() => {
   if (!document.hidden) refreshActiveProject();
 }, 5000);
 
-// 3. Background tab throttling
+// 3. Manifest subscription sync: 60s
+setInterval(() => {
+  syncProjectsManifest();
+}, 60000);
+
+// 4. Background tab throttling
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     refreshTopBar();
     refreshActiveProject();
+    syncProjectsManifest();
   }
 });
 </script>
