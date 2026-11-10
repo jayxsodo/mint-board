@@ -503,6 +503,110 @@
     background: #f43f5e;
   }
 
+  /* Built-in Bot Section */
+  .builtin-bot-container {
+    background: #0b0f17;
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .builtin-bot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .builtin-bot-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 860px) {
+    .builtin-bot-grid { grid-template-columns: 1fr; }
+  }
+  .builtin-bot-card {
+    background: #111722;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .builtin-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .builtin-card-desc {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .builtin-card-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+  .builtin-bot-footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #141b27;
+  }
+  .builtin-bot-warn {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  /* Modern Toggle Switch */
+  .switch-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .switch-toggle-label input {
+    display: none;
+  }
+  .switch-slider {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    background: #252e42;
+    border-radius: 18px;
+    transition: 0.25s;
+    display: inline-block;
+  }
+  .switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.25s;
+  }
+  .switch-toggle-label input:checked + .switch-slider {
+    background: var(--green);
+  }
+  .switch-toggle-label input:checked + .switch-slider:before {
+    transform: translateX(16px);
+  }
+  .switch-text {
+    font-size: 12.5px;
+    color: var(--text);
+  }
+
   /* Card D: Bot Table */
   .bot-table-container {
     overflow-x: auto;
@@ -683,7 +787,7 @@
     <div class="card-header">
       <div>
         <div class="card-title">
-          <span>发售进度</span>
+          <span id="cardATitle">发售进度</span>
           <span class="tab-badge" id="cardAStatusBadge">—</span>
         </div>
         <div class="card-subtitle" id="cardASubtitle">发售合约数据读取</div>
@@ -748,7 +852,7 @@
     <div class="card-header">
       <div>
         <div class="card-title">
-          <span>价格与收益 (Pancake V2)</span>
+          <span id="cardBTitle">价格与收益</span>
           <span class="tab-badge" id="poolStatusBadge">无池/未开盘</span>
         </div>
         <div class="card-subtitle" id="poolSubtitle">代币与 WBNB 兑换流动池</div>
@@ -823,7 +927,7 @@
     <div class="card-header">
       <div>
         <div class="card-title">
-          <span>卖出面板</span>
+          <span id="cardCTitle">卖出面板</span>
           <span style="font-size:12px; color:var(--text-dim); font-weight:normal">(仅连接本人钱包亲自签名)</span>
         </div>
         <div class="card-subtitle">Pancake V2 Router 交互 · 绝不保存私钥</div>
@@ -879,12 +983,84 @@
     <div class="card-header">
       <div>
         <div class="card-title">
-          <span>卖出机器人 (自动化监控)</span>
+          <span id="cardDTitle">卖出机器人</span>
         </div>
-        <div class="card-subtitle">阶梯止盈 / 峰值回撤策略引擎</div>
+        <div class="card-subtitle">每项目内置阶梯止盈/秒卖 + 自定义多任务引擎</div>
       </div>
       <div>
-        <button class="btn-sm btn-secondary" id="btnNewBot">➕ 新建机器人</button>
+        <button class="btn-sm btn-secondary" id="btnNewBot">➕ 新建自定义机器人</button>
+      </div>
+    </div>
+
+    <!-- Built-in Bot for Active Project -->
+    <div class="builtin-bot-container" id="builtinBotBox">
+      <div class="builtin-bot-header">
+        <div style="display:flex; align-items:center; gap:8px">
+          <span style="font-weight:700; font-size:13.5px; color:var(--text)">🤖 本项目内置机器人 · <span id="builtinBotProjName">—</span></span>
+          <span class="bot-status-tag bot-stopped" id="builtinBotOverallStatus">已停止</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-dim)">
+          心跳: <span id="builtinBotHeartbeat" style="font-family:var(--font-mono)">—</span>
+        </div>
+      </div>
+
+      <div class="builtin-bot-grid">
+        <!-- Switch A: Ladder Take-Profit -->
+        <div class="builtin-bot-card">
+          <div class="builtin-card-top">
+            <label class="switch-toggle-label">
+              <input type="checkbox" id="builtinLadderToggle">
+              <span class="switch-slider"></span>
+              <span class="switch-text"><b>开关 A · 阶梯止盈</b></span>
+            </label>
+            <button class="btn-sm btn-secondary" id="btnEditBuiltinLadder" style="padding:2px 7px; font-size:11px">⚙️ 参数</button>
+          </div>
+          <div class="builtin-card-desc" id="builtinLadderSummary">
+            阶梯: 2x→50% | 3x→25% | 5x→25% · 滑点 12% · 轮询 1000ms
+          </div>
+          <div class="builtin-card-meta">
+            <span>现价倍数: <b id="builtinCurMult" style="color:var(--blue)">—</b></span>
+            <span>峰值: <b id="builtinPeakMult" style="color:var(--amber)">—</b></span>
+            <span>已触发: <b id="builtinLaddersDone" style="color:var(--green)">无</b></span>
+          </div>
+        </div>
+
+        <!-- Switch B: Instant Sell 100% -->
+        <div class="builtin-bot-card">
+          <div class="builtin-card-top">
+            <label class="switch-toggle-label">
+              <input type="checkbox" id="builtinInstantToggle">
+              <span class="switch-slider"></span>
+              <span class="switch-text"><b>开关 B · 开盘秒卖全部</b></span>
+            </label>
+            <span class="tab-badge badge-unopened" id="builtinInstantBadge" style="font-size:10px; padding:2px 6px">未武装</span>
+          </div>
+          <div class="builtin-card-desc">
+            紧盯开盘证据链 (openedFn=1 或储备>0且可报价) → 100% 卖出
+          </div>
+          <div class="builtin-card-meta">
+            <span>开盘证据: <b id="builtinEvidenceStatus">监测中</b></span>
+            <span>触发后: <b style="color:var(--text-dim)">阶梯自动关闭</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Options & Disclaimer -->
+      <div class="builtin-bot-footer">
+        <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; cursor:pointer">
+          <input type="checkbox" id="builtinAutoFillToggle">
+          <span>🎯 触发时自动填单并弹窗确认 (需连接钱包且关闭模拟模式，<b>绝不自动签名</b>)</span>
+        </label>
+        <div class="builtin-bot-warn">
+          ⚠️ 提醒：本机器人运行在浏览器前端，<b>页面关闭后机器人不运行</b>。刷新页面后已开启的开关恢复为运行状态。
+        </div>
+      </div>
+    </div>
+
+    <!-- Divider for Custom Manual Bots -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin:14px 0 8px 0; padding-top:10px; border-top:1px dashed var(--border)">
+      <div style="font-size:12px; font-weight:600; color:var(--text-dim)">
+        📋 手动自定义机器人任务列表 (保留原样)
       </div>
     </div>
 
@@ -1553,6 +1729,10 @@ function applySyncedProjects(manifestProjects) {
       });
       saveBots();
       renderBotTable();
+
+      // Stop & remove project builtin bot
+      removeBuiltinBot(p.id);
+
       addLog("SYS", `项目已结案，已自动移除: ${p.name}`, p.id);
     } else {
       remaining.push(p);
@@ -1611,6 +1791,7 @@ function applySyncedProjects(manifestProjects) {
         state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
       };
       projects.push(newProj);
+      loadBuiltinBot(newProj.id);
       addLog("SYS", `新增同步项目 [${newProj.name}] (ID: ${newProj.id})`, newProj.id);
     }
   }
@@ -1939,6 +2120,7 @@ function selectProject(idx) {
   activeProjectIdx = idx;
   renderProjectTabs();
   refreshActiveProject();
+  renderBuiltinBotSection();
 }
 
 // Keyboards 1-9 switch project
@@ -2116,6 +2298,16 @@ async function refreshTopBar() {
 async function refreshActiveProject() {
   const p = projects[activeProjectIdx];
   if (!p) return;
+
+  // Card Titles with Project Name
+  const cardATitle = document.getElementById("cardATitle");
+  if (cardATitle) cardATitle.textContent = "发售进度 · " + p.name;
+  const cardBTitle = document.getElementById("cardBTitle");
+  if (cardBTitle) cardBTitle.textContent = "价格与收益 · " + p.name;
+  const cardCTitle = document.getElementById("cardCTitle");
+  if (cardCTitle) cardCTitle.textContent = "卖出面板 · " + p.name;
+  const cardDTitle = document.getElementById("cardDTitle");
+  if (cardDTitle) cardDTitle.textContent = "卖出机器人 · " + p.name;
 
   if (!p.state) {
     p.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
@@ -2520,6 +2712,397 @@ document.getElementById("btnFinalSign").addEventListener("click", async () => {
 // ==========================================
 // 9. CARD D: SELL BOT AUTOMATION ENGINE
 // ==========================================
+// Builtin Bot State & Helpers
+const builtinBotRunners = {};
+
+function getBuiltinBotKey(projectId) {
+  return "mint_board_builtin_bot_" + projectId;
+}
+
+function getDefaultBuiltinBot(p) {
+  const basePrice = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
+  return {
+    projectId: p.id,
+    ladderEnabled: false,
+    instantSellEnabled: false,
+    autoFill: false,
+    costPrice: basePrice,
+    ladders: [
+      { multiple: 2.0, sellPercent: 50 },
+      { multiple: 3.0, sellPercent: 25 },
+      { multiple: 5.0, sellPercent: 25 }
+    ],
+    drawdownEnabled: false,
+    drawdownActive: 3.0,
+    drawdownPct: 15,
+    slippage: 12,
+    interval: 1000,
+    curMultiple: 0,
+    peakMultiple: 0,
+    executedLadders: [],
+    drawdownTriggered: false,
+    instantSellTriggered: false,
+    lastHeartbeat: null
+  };
+}
+
+function loadBuiltinBot(projectId) {
+  const p = projects.find(item => item.id === projectId);
+  if (!p) return null;
+  const key = getBuiltinBotKey(projectId);
+  const str = localStorage.getItem(key);
+  if (str) {
+    try {
+      const b = JSON.parse(str);
+      if (!b.ladders || !b.ladders.length) {
+        b.ladders = [
+          { multiple: 2.0, sellPercent: 50 },
+          { multiple: 3.0, sellPercent: 25 },
+          { multiple: 5.0, sellPercent: 25 }
+        ];
+      }
+      if (b.interval === undefined) b.interval = 1000;
+      if (b.slippage === undefined) b.slippage = 12;
+      if (!b.executedLadders) b.executedLadders = [];
+      return b;
+    } catch (e) {}
+  }
+  const defaultBot = getDefaultBuiltinBot(p);
+  saveBuiltinBot(projectId, defaultBot);
+  return defaultBot;
+}
+
+function saveBuiltinBot(projectId, bot) {
+  localStorage.setItem(getBuiltinBotKey(projectId), JSON.stringify(bot));
+}
+
+function removeBuiltinBot(projectId) {
+  stopBuiltinBotRunner(projectId);
+  localStorage.removeItem(getBuiltinBotKey(projectId));
+}
+
+function startBuiltinBotRunner(projectId) {
+  if (builtinBotRunners[projectId]) return;
+  const p = projects.find(item => item.id === projectId);
+  if (!p) return;
+
+  const b = loadBuiltinBot(projectId);
+  if (b) {
+    b.lastHeartbeat = Date.now();
+    saveBuiltinBot(projectId, b);
+  }
+
+  const runner = setInterval(async () => {
+    try {
+      const proj = projects.find(item => item.id === projectId);
+      if (!proj) {
+        stopBuiltinBotRunner(projectId);
+        return;
+      }
+      const curBot = loadBuiltinBot(projectId);
+      if (!curBot || (!curBot.ladderEnabled && !curBot.instantSellEnabled)) {
+        stopBuiltinBotRunner(projectId);
+        return;
+      }
+      curBot.lastHeartbeat = Date.now();
+      await pollBuiltinBotCycle(curBot, proj);
+      saveBuiltinBot(projectId, curBot);
+    } catch (err) {
+      console.warn("内置机器人轮询异常 (" + projectId + "):", err);
+    }
+  }, 1000);
+
+  builtinBotRunners[projectId] = runner;
+}
+
+function stopBuiltinBotRunner(projectId) {
+  if (builtinBotRunners[projectId]) {
+    clearInterval(builtinBotRunners[projectId]);
+    delete builtinBotRunners[projectId];
+  }
+}
+
+async function checkInstantSellEvidence(p) {
+  // Test simulation trigger
+  if (p._simulateOpenedTrigger) {
+    p.state.openedLatched = true;
+    return { triggered: true, reason: "模拟开盘证据注入 (自测验证)" };
+  }
+
+  // 1. Check presale contract openedFn
+  const isOpenedFn = await checkPresaleOpened(p);
+  if (isOpenedFn) {
+    p.state.openedLatched = true;
+    return { triggered: true, reason: "发售合约开盘函数 (" + (p.openedFn || "opened/launched") + ") 返回 1" };
+  }
+
+  // 2. Check pair reserves on both sides > 0 and Router can quote
+  const pairAddr = await fetchPairAddress(p.token);
+  if (pairAddr) {
+    const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
+    if (wbnbReserve > 0n && tokenReserve > 0n) {
+      const meta = await fetchTokenMeta(p.token);
+      const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
+      try {
+        const quoteOut = await quoteSell(testAmount, p.token);
+        if (quoteOut > 0n) {
+          p.state.openedLatched = true;
+          return { triggered: true, reason: "流动池双边储备正常 (" + (Number(wbnbReserve)/1e18).toFixed(2) + " BNB) 且 Router 成功报价" };
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 3. Fallback: openedLatched and Router can quote
+  if (p.state && p.state.openedLatched) {
+    const meta = await fetchTokenMeta(p.token);
+    const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
+    try {
+      const quoteOut = await quoteSell(testAmount, p.token);
+      if (quoteOut > 0n) {
+        return { triggered: true, reason: "项目已处于锁定开盘 (openedLatched) 且 Router 成功报价" };
+      }
+    } catch (e) {}
+  }
+
+  return { triggered: false, reason: "" };
+}
+
+async function pollBuiltinBotCycle(b, p) {
+  // 1. Check Switch B: Instant Sell 100%
+  if (b.instantSellEnabled && !b.instantSellTriggered) {
+    const ev = await checkInstantSellEvidence(p);
+    if (ev.triggered) {
+      b.instantSellTriggered = true;
+      b.instantSellEnabled = false;
+      const wasLadderOn = b.ladderEnabled;
+      b.ladderEnabled = false; // Turn off ladder to prevent duplicate sells
+      saveBuiltinBot(p.id, b);
+
+      addLog("BOT", "⚡ 【开盘秒卖触发】" + p.name + ": " + ev.reason + "，已执行 100% 仓位卖出动作!" + (wasLadderOn ? " 阶梯止盈开关已自动联动关闭，避免重复卖出。" : ""), p.id);
+
+      triggerBuiltinBotAction(b, p, "开盘秒卖触发 (100% 仓位): " + ev.reason, 100);
+
+      if (projects[activeProjectIdx]?.id === p.id) {
+        renderBuiltinBotSection();
+      }
+      return;
+    }
+  }
+
+  // 2. Check Switch A: Ladder Take-Profit
+  if (b.ladderEnabled) {
+    const meta = await fetchTokenMeta(p.token);
+    const pairAddr = await fetchPairAddress(p.token);
+    if (pairAddr) {
+      const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
+      if (wbnbReserve > 0n && tokenReserve > 0n) {
+        const curPrice = (Number(wbnbReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
+        const costPrice = b.costPrice || (p.pricePerShare / p.tokensPerShare);
+        if (costPrice > 0) {
+          const mult = curPrice / costPrice;
+          b.curMultiple = mult;
+          if (!b.peakMultiple || mult > b.peakMultiple) {
+            b.peakMultiple = mult;
+          }
+
+          if (b.ladders && Array.isArray(b.ladders)) {
+            for (let i = 0; i < b.ladders.length; i++) {
+              const lad = b.ladders[i];
+              if (mult >= lad.multiple && !b.executedLadders.includes(i)) {
+                b.executedLadders.push(i);
+                b.realizedMultiple = mult;
+                saveBuiltinBot(p.id, b);
+                addLog("BOT", "🎯 【阶梯止盈触发】" + p.name + ": 现价倍数 " + mult.toFixed(2) + "x 达标 " + lad.multiple + "x，建议卖出 " + lad.sellPercent + "%", p.id);
+                triggerBuiltinBotAction(b, p, "阶梯止盈触发! 当前倍数 " + mult.toFixed(2) + "x 达到目标 " + lad.multiple + "x，建议卖出 " + lad.sellPercent + "%", lad.sellPercent);
+              }
+            }
+          }
+
+          if (b.drawdownEnabled && b.peakMultiple >= b.drawdownActive) {
+            const drawdownPct = ((b.peakMultiple - mult) / b.peakMultiple) * 100;
+            if (drawdownPct >= b.drawdownPct && !b.drawdownTriggered) {
+              b.drawdownTriggered = true;
+              saveBuiltinBot(p.id, b);
+              addLog("BOT", "📉 【峰值回撤触发】" + p.name + ": 峰值 " + b.peakMultiple.toFixed(2) + "x，当前回撤 " + drawdownPct.toFixed(1) + "% (阈值 " + b.drawdownPct + "%)，执行全仓 100% 卖出!", p.id);
+              triggerBuiltinBotAction(b, p, "峰值回撤触发! 峰值 " + b.peakMultiple.toFixed(2) + "x，回撤 " + drawdownPct.toFixed(1) + "%，全仓卖出 100%", 100);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (projects[activeProjectIdx]?.id === p.id) {
+    updateBuiltinBotLiveStats(b);
+  }
+}
+
+function triggerBuiltinBotAction(b, p, reason, sellPct) {
+  addLog("BOT", "🔔 【内置机器人动作】" + p.name + ": " + reason, p.id);
+
+  // Row / container flash
+  const box = document.getElementById("builtinBotBox");
+  if (box && projects[activeProjectIdx]?.id === p.id) {
+    box.classList.add("row-flash");
+    setTimeout(() => box.classList.remove("row-flash"), 15000);
+  }
+
+  // Web Notification
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("🎯 Agent 内置机器人提醒: " + p.name, {
+      body: reason,
+      icon: "https://pancakeswap.finance/favicon.ico"
+    });
+  }
+
+  // Pre-fill sell panel
+  if (projects[activeProjectIdx]?.id !== p.id) {
+    const pIdx = projects.findIndex(item => item.id === p.id);
+    if (pIdx >= 0) selectProject(pIdx);
+  }
+  fillSellPanelWithPct(sellPct);
+
+  // Auto-fill & confirm dialog trigger if criteria met
+  if (b.autoFill && connectedWalletAddress && !simulationMode) {
+    addLog("BOT", "【自动填单呼出】已为 " + p.name + " 填入 Card C 卖出面板并唤起确认弹窗，请核对信息并签名", p.id);
+    document.getElementById("btnExecuteSell").click();
+  }
+}
+
+function renderBuiltinBotSection() {
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+
+  const b = loadBuiltinBot(p.id);
+  if (!b) return;
+
+  document.getElementById("builtinBotProjName").textContent = p.name;
+
+  const ladToggle = document.getElementById("builtinLadderToggle");
+  if (ladToggle) ladToggle.checked = !!b.ladderEnabled;
+
+  const instToggle = document.getElementById("builtinInstantToggle");
+  if (instToggle) instToggle.checked = !!b.instantSellEnabled;
+
+  const autoToggle = document.getElementById("builtinAutoFillToggle");
+  if (autoToggle) autoToggle.checked = !!b.autoFill;
+
+  const statusTag = document.getElementById("builtinBotOverallStatus");
+  const isRunning = (b.ladderEnabled || b.instantSellEnabled);
+  if (statusTag) {
+    statusTag.textContent = isRunning ? "运行中" : "已停止";
+    statusTag.className = "bot-status-tag " + (isRunning ? "bot-running" : "bot-stopped");
+  }
+
+  const summaryEl = document.getElementById("builtinLadderSummary");
+  if (summaryEl) {
+    const ladStrs = (b.ladders || []).map(l => l.multiple + "x→" + l.sellPercent + "%").join(" | ");
+    summaryEl.textContent = "阶梯: " + (ladStrs || "2x→50% | 3x→25% | 5x→25%") + " · 滑点 " + (b.slippage || 12) + "% · 轮询 " + (b.interval || 1000) + "ms";
+  }
+
+  const instBadge = document.getElementById("builtinInstantBadge");
+  if (instBadge) {
+    if (b.instantSellTriggered) {
+      instBadge.textContent = "已触发秒卖";
+      instBadge.className = "tab-badge badge-opened";
+    } else if (b.instantSellEnabled) {
+      instBadge.textContent = "紧盯开盘中";
+      instBadge.className = "tab-badge badge-selling";
+    } else {
+      instBadge.textContent = "未武装";
+      instBadge.className = "tab-badge badge-unopened";
+    }
+  }
+
+  const evEl = document.getElementById("builtinEvidenceStatus");
+  if (evEl) {
+    if (p.state && p.state.openedLatched) {
+      evEl.textContent = "已探明/锁定开盘";
+      evEl.style.color = "var(--green)";
+    } else if (p.statusBadge === "已开盘") {
+      evEl.textContent = "已探明开盘";
+      evEl.style.color = "var(--green)";
+    } else {
+      evEl.textContent = "等待开盘证据...";
+      evEl.style.color = "var(--amber)";
+    }
+  }
+
+  updateBuiltinBotLiveStats(b);
+}
+
+function updateBuiltinBotLiveStats(b) {
+  const now = Date.now();
+  const hbEl = document.getElementById("builtinBotHeartbeat");
+  if (hbEl) {
+    if (b.lastHeartbeat) {
+      const diff = Math.round((now - b.lastHeartbeat) / 1000);
+      hbEl.textContent = diff + "s 前";
+      hbEl.style.color = diff > 90 ? "var(--red)" : "var(--green)";
+    } else {
+      hbEl.textContent = "—";
+      hbEl.style.color = "var(--text-dim)";
+    }
+  }
+
+  const curEl = document.getElementById("builtinCurMult");
+  if (curEl) curEl.textContent = b.curMultiple ? (b.curMultiple.toFixed(2) + "x") : "—";
+
+  const peakEl = document.getElementById("builtinPeakMult");
+  if (peakEl) peakEl.textContent = b.peakMultiple ? (b.peakMultiple.toFixed(2) + "x") : "—";
+
+  const laddersDoneEl = document.getElementById("builtinLaddersDone");
+  if (laddersDoneEl) {
+    if (b.executedLadders && b.executedLadders.length > 0) {
+      const doneStrs = b.executedLadders.map(i => b.ladders[i] ? (b.ladders[i].multiple + "x") : "").filter(Boolean);
+      laddersDoneEl.textContent = doneStrs.join(", ") + " 已卖";
+    } else {
+      laddersDoneEl.textContent = "无";
+    }
+  }
+}
+
+function openBuiltinBotModal(projectId) {
+  const p = projects.find(item => item.id === projectId);
+  if (!p) return;
+  const b = loadBuiltinBot(projectId);
+
+  const pSelect = document.getElementById("mBotProjectSelect");
+  pSelect.innerHTML = "<option value=\"" + p.id + "\">" + escapeHtml(p.name) + "</option>";
+  pSelect.value = p.id;
+  pSelect.disabled = true;
+
+  document.getElementById("modalBotTitle").textContent = "配置内置阶梯止盈 · " + p.name;
+  document.getElementById("editBotId").value = "builtin_" + p.id;
+
+  const basePrice = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
+  document.getElementById("mBotCostPrice").value = b.costPrice || basePrice;
+  document.getElementById("mBotDrawdownEnable").checked = !!b.drawdownEnabled;
+  document.getElementById("drawdownFieldsRow").style.display = b.drawdownEnabled ? "grid" : "none";
+  document.getElementById("mBotDrawdownActive").value = b.drawdownActive || 3.0;
+  document.getElementById("mBotDrawdownPct").value = b.drawdownPct || 15;
+  document.getElementById("mBotSlippage").value = b.slippage || 12;
+  document.getElementById("mBotInterval").value = b.interval || 1000;
+
+  const ladderCont = document.getElementById("botLaddersContainer");
+  ladderCont.innerHTML = "";
+  (b.ladders || []).forEach(l => addLadderRow(l.multiple, l.sellPercent));
+
+  document.getElementById("btnDeleteBot").style.display = "none";
+  document.getElementById("botModal").style.display = "flex";
+}
+
+// Window test helper for simulating opening evidence
+window.__testSimulateOpen = function(projId = null) {
+  const targetId = projId || projects[activeProjectIdx]?.id;
+  const p = projects.find(item => item.id === targetId);
+  if (!p) return "项目未找到";
+  p._simulateOpenedTrigger = true;
+  addLog("SYS", "[自测辅助] 已向项目 [" + p.name + "] 注入模拟开盘证据", p.id);
+  return "已成功注入开盘证据: " + p.name;
+};
+
 function renderBotTable() {
   const tbody = document.getElementById("botTableBody");
   tbody.innerHTML = "";
@@ -2689,11 +3272,17 @@ function fillSellPanelFromBot(idx) {
 
 function fillSellPanelWithPct(pctNum) {
   const p = projects[activeProjectIdx];
-  if (!p || currentSellRawBalance === 0n) return;
+  if (!p) return;
   const meta = tokenCache[p.token.toLowerCase()] || { decimals: 18 };
-  const rawToSell = (currentSellRawBalance * BigInt(Math.round(pctNum * 100))) / 10000n;
-  const norm = Number(rawToSell) / (10 ** meta.decimals);
-  document.getElementById("sellAmountInput").value = norm;
+  const ratio = pctNum > 1 ? (pctNum / 100) : pctNum;
+  if (currentSellRawBalance > 0n) {
+    const rawToSell = (currentSellRawBalance * BigInt(Math.round(ratio * 10000))) / 10000n;
+    const norm = Number(rawToSell) / (10 ** meta.decimals);
+    document.getElementById("sellAmountInput").value = norm;
+  } else if ((p.heldShares || 0) > 0 && (p.tokensPerShare || 0) > 0) {
+    const estTokens = p.heldShares * p.tokensPerShare * ratio;
+    document.getElementById("sellAmountInput").value = estTokens;
+  }
   recalculateSellQuote();
 }
 
@@ -2789,12 +3378,14 @@ document.getElementById("btnSaveProject").addEventListener("click", () => {
   } else {
     projects.push(pObj);
     activeProjectIdx = projects.length - 1;
+    loadBuiltinBot(pObj.id);
   }
 
   saveProjects();
   document.getElementById("projectModal").style.display = "none";
   renderProjectTabs();
   refreshActiveProject();
+  renderBuiltinBotSection();
   addLog("SYS", `项目 [${pObj.name}] 配置已保存 (${pObj.source === 'sync' ? '云端同步' : '本地自定义'})`, pObj.id);
 });
 
@@ -2812,6 +3403,7 @@ document.getElementById("btnDeleteProject").addEventListener("click", () => {
       });
       saveBots();
       renderBotTable();
+      removeBuiltinBot(toDel.id);
     }
     projects = projects.filter(item => item.id !== editId);
     if (activeProjectIdx >= projects.length) activeProjectIdx = Math.max(0, projects.length - 1);
@@ -2916,9 +3508,79 @@ document.getElementById("logFilterSelect").addEventListener("change", (e) => {
 });
 
 // Bot Modal
-document.getElementById("btnNewBot").addEventListener("click", () => openBotModal());
-document.getElementById("btnCloseBotModal").onclick = () => document.getElementById("botModal").style.display = "none";
-document.getElementById("btnCancelBot").onclick = () => document.getElementById("botModal").style.display = "none";
+// Built-in Bot Listeners
+document.getElementById("builtinLadderToggle").addEventListener("change", (e) => {
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+  const b = loadBuiltinBot(p.id);
+  b.ladderEnabled = e.target.checked;
+  if (b.ladderEnabled) {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    b.lastHeartbeat = Date.now();
+    startBuiltinBotRunner(p.id);
+    addLog("BOT", "内置机器人 [" + p.name + "] 阶梯止盈已启动! 轮询: " + (b.interval || 1000) + "ms", p.id);
+  } else {
+    addLog("BOT", "内置机器人 [" + p.name + "] 阶梯止盈已停止", p.id);
+    if (!b.instantSellEnabled) {
+      stopBuiltinBotRunner(p.id);
+    }
+  }
+  saveBuiltinBot(p.id, b);
+  renderBuiltinBotSection();
+});
+
+document.getElementById("builtinInstantToggle").addEventListener("change", (e) => {
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+  const b = loadBuiltinBot(p.id);
+  b.instantSellEnabled = e.target.checked;
+  if (b.instantSellEnabled) {
+    b.instantSellTriggered = false; // re-arm
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    b.lastHeartbeat = Date.now();
+    startBuiltinBotRunner(p.id);
+    addLog("BOT", "⚡ 内置机器人 [" + p.name + "] 开盘秒卖已武装就绪! 轮询: 1000ms，紧盯开盘证据链...", p.id);
+  } else {
+    addLog("BOT", "内置机器人 [" + p.name + "] 开盘秒卖已解除武装", p.id);
+    if (!b.ladderEnabled) {
+      stopBuiltinBotRunner(p.id);
+    }
+  }
+  saveBuiltinBot(p.id, b);
+  renderBuiltinBotSection();
+});
+
+document.getElementById("builtinAutoFillToggle").addEventListener("change", (e) => {
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+  const b = loadBuiltinBot(p.id);
+  b.autoFill = e.target.checked;
+  saveBuiltinBot(p.id, b);
+  addLog("SYS", "内置机器人 [" + p.name + "] 自动填单设置: " + (b.autoFill ? "开启" : "关闭"));
+});
+
+document.getElementById("btnEditBuiltinLadder").addEventListener("click", () => {
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+  openBuiltinBotModal(p.id);
+});
+
+document.getElementById("btnNewBot").addEventListener("click", () => {
+  document.getElementById("mBotProjectSelect").disabled = false;
+  openBotModal();
+});
+document.getElementById("btnCloseBotModal").onclick = () => {
+  document.getElementById("mBotProjectSelect").disabled = false;
+  document.getElementById("botModal").style.display = "none";
+};
+document.getElementById("btnCancelBot").onclick = () => {
+  document.getElementById("mBotProjectSelect").disabled = false;
+  document.getElementById("botModal").style.display = "none";
+};
 
 document.getElementById("mBotDrawdownEnable").addEventListener("change", (e) => {
   document.getElementById("drawdownFieldsRow").style.display = e.target.checked ? "grid" : "none";
@@ -2993,6 +3655,36 @@ document.getElementById("btnAddLadderRow").onclick = () => addLadderRow(2.0, 25)
 
 document.getElementById("btnSaveBot").addEventListener("click", () => {
   const editId = document.getElementById("editBotId").value;
+  if (editId.startsWith("builtin_")) {
+    const pId = editId.replace("builtin_", "");
+    const b = loadBuiltinBot(pId);
+    if (!b) return;
+    b.costPrice = parseFloat(document.getElementById("mBotCostPrice").value) || 0;
+    b.drawdownEnabled = document.getElementById("mBotDrawdownEnable").checked;
+    b.drawdownActive = parseFloat(document.getElementById("mBotDrawdownActive").value) || 3.0;
+    b.drawdownPct = parseFloat(document.getElementById("mBotDrawdownPct").value) || 15;
+    b.slippage = parseFloat(document.getElementById("mBotSlippage").value) || 12;
+    b.interval = Math.max(parseInt(document.getElementById("mBotInterval").value) || 1000, 500);
+
+    const ladders = [];
+    document.querySelectorAll("#botLaddersContainer > div").forEach(div => {
+      const m = parseFloat(div.querySelector(".lad-mult").value);
+      const p = parseFloat(div.querySelector(".lad-pct").value);
+      if (!isNaN(m) && !isNaN(p)) ladders.push({ multiple: m, sellPercent: p });
+    });
+    if (ladders.length > 0) {
+      b.ladders = ladders;
+    }
+
+    saveBuiltinBot(pId, b);
+    document.getElementById("botModal").style.display = "none";
+    document.getElementById("mBotProjectSelect").disabled = false;
+    renderBuiltinBotSection();
+    const proj = projects.find(item => item.id === pId);
+    addLog("SYS", "内置机器人 [" + (proj ? proj.name : pId) + "] 阶梯止盈参数已保存");
+    return;
+  }
+
   const pId = document.getElementById("mBotProjectSelect").value;
   const ladders = [];
   document.querySelectorAll("#botLaddersContainer > div").forEach(div => {
@@ -3059,6 +3751,16 @@ renderProjectTabs();
 renderBotTable();
 refreshTopBar();
 refreshActiveProject();
+renderBuiltinBotSection();
+
+// Restore running builtin bots
+projects.forEach(p => {
+  const b = loadBuiltinBot(p.id);
+  if (b && (b.ladderEnabled || b.instantSellEnabled)) {
+    startBuiltinBotRunner(p.id);
+    addLog("BOT", "[自动恢复运行] 内置机器人 [" + p.name + "] 已恢复监控 (阶梯:" + (b.ladderEnabled ? "开" : "关") + ", 秒卖:" + (b.instantSellEnabled ? "开" : "关") + ")", p.id);
+  }
+});
 
 // Immediately trigger manifest sync on page load
 syncProjectsManifest();
