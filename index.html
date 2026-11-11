@@ -852,6 +852,7 @@
   </div>
 
   <div class="top-stats">
+    <div class="stat-chip">节点: <b id="rpcNode" style="color:var(--blue)">自建中继·法兰克福</b></div>
     <div class="stat-chip">BNB 余额: <b id="walletBnbBal">— BNB</b></div>
     <div class="stat-chip">块高: <b id="blockHeight">—</b></div>
     <div class="stat-chip">延迟: <b id="rpcLatency">— ms</b></div>
@@ -1521,29 +1522,44 @@ const FACTORY = "0xcA143Ce32Fe78f1F7019d7d551a6402Fc5350c73";
 const ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 const USDT = "0x55d398326f99059fF775485246999027B3197955";
 
-const RPCS = [
-  "https://bsc-dataseed.bnbchain.org",
-  "https://bsc-dataseed1.defibit.io",
-  "https://bsc-dataseed1.ninicoin.io",
-  "https://bsc-rpc.publicnode.com",
-  "https://rpc.ankr.com/bsc"
-];
-let currentRpcIdx = 0;
-let lastSuccessfulRpcHost = "bsc-dataseed.bnbchain.org";
+// Primary RPC: Frankfurt VPS self-hosted BSC relay
+const RELAY_RPC = "https://45-76-80-16.sslip.io:8443/rpc/251a4c153b54acbcc576ecb1a76f2f73";
 
-// Track health and latency across endpoints for fast-lane routing
-const rpcNodes = RPCS.map(url => {
-  let host = "";
-  try { host = new URL(url).host; } catch (e) { host = url; }
-  return {
-    url,
-    host,
-    latency: 300,
-    consecutiveErrors: 0,
-    lastErrorTime: 0,
-    lastSuccessTime: 0
-  };
-});
+// Endpoint configurations (Relay is #1 priority, public nodes are failover fallbacks)
+const RPC_CONFIGS = [
+  { url: RELAY_RPC, host: "自建中继·法兰克福", isRelay: true, baseLatency: 150 },
+  { url: "https://bsc-dataseed.bnbchain.org", host: "bsc-dataseed.bnbchain.org", isRelay: false, baseLatency: 300 },
+  { url: "https://bsc-dataseed1.defibit.io", host: "bsc-dataseed1.defibit.io", isRelay: false, baseLatency: 300 },
+  { url: "https://bsc-dataseed1.ninicoin.io", host: "bsc-dataseed1.ninicoin.io", isRelay: false, baseLatency: 300 },
+  { url: "https://bsc-rpc.publicnode.com", host: "bsc-rpc.publicnode.com", isRelay: false, baseLatency: 300 },
+  { url: "https://rpc.ankr.com/bsc", host: "rpc.ankr.com", isRelay: false, baseLatency: 300 }
+];
+
+const RPCS = RPC_CONFIGS.map(c => c.url);
+let currentRpcIdx = 0;
+let lastSuccessfulRpcHost = RPC_CONFIGS[0].host;
+
+// Track health and latency across endpoints for dynamic routing & failover
+const rpcNodes = RPC_CONFIGS.map(cfg => ({
+  url: cfg.url,
+  host: cfg.host,
+  isRelay: cfg.isRelay,
+  baseLatency: cfg.baseLatency,
+  latency: cfg.baseLatency,
+  consecutiveErrors: 0,
+  lastErrorTime: 0,
+  lastSuccessTime: 0
+}));
+
+function updateActiveRpcHost(host) {
+  if (!host) return;
+  lastSuccessfulRpcHost = host;
+  const nodeEl = document.getElementById("rpcNode");
+  if (nodeEl) {
+    nodeEl.textContent = host;
+    nodeEl.style.color = (host === "自建中继·法兰克福") ? "var(--blue)" : "var(--text-dim)";
+  }
+}
 
 function getFastLaneCandidates() {
   const now = Date.now();
@@ -1551,13 +1567,15 @@ function getFastLaneCandidates() {
     const aCooldown = (a.consecutiveErrors >= 2 && (now - a.lastErrorTime < 30000));
     const bCooldown = (b.consecutiveErrors >= 2 && (now - b.lastErrorTime < 30000));
     if (aCooldown !== bCooldown) return aCooldown ? 1 : -1;
-    return (a.latency || 999) - (b.latency || 999);
+    const aLat = (!aCooldown && (now - a.lastErrorTime >= 30000) && a.consecutiveErrors > 0) ? a.baseLatency : (a.latency || 999);
+    const bLat = (!bCooldown && (now - b.lastErrorTime >= 30000) && b.consecutiveErrors > 0) ? b.baseLatency : (b.latency || 999);
+    return aLat - bLat;
   });
 }
 
 async function fastEthCall(to, data, timeoutMs = 2000) {
   const candidates = getFastLaneCandidates();
-  for (let i = 0; i < Math.min(2, candidates.length); i++) {
+  for (let i = 0; i < Math.min(3, candidates.length); i++) {
     const node = candidates[i];
     const start = performance.now();
     try {
@@ -1573,7 +1591,10 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
           params: [{ to, data }, "latest"]
         }),
         signal: controller.signal
-      }).then(r => r.json());
+      }).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
       clearTimeout(timer);
 
       if (res && res.result !== undefined && res.result !== null) {
@@ -1581,7 +1602,7 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
         node.latency = latency;
         node.consecutiveErrors = 0;
         node.lastSuccessTime = Date.now();
-        lastSuccessfulRpcHost = node.host;
+        updateActiveRpcHost(node.host);
         return { result: res.result, latency, rpcHost: node.host };
       }
       node.consecutiveErrors++;
@@ -1597,44 +1618,40 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
 }
 
 async function rpcRequest(method, params = []) {
-  const start = performance.now();
-  let attempts = 0;
-  while (attempts < RPCS.length) {
-    const rpcUrl = RPCS[currentRpcIdx];
-    const node = rpcNodes.find(n => n.url === rpcUrl);
+  const candidates = getFastLaneCandidates();
+  for (let i = 0; i < candidates.length; i++) {
+    const node = candidates[i];
+    const start = performance.now();
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(rpcUrl, {
+      const res = await fetch(node.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
         signal: controller.signal
-      }).then(r => r.json());
+      }).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
       clearTimeout(timeout);
 
-      if (res && res.result !== undefined) {
+      if (res && res.result !== undefined && res.result !== null) {
         const latency = Math.round(performance.now() - start);
-        let host = "";
-        try { host = new URL(rpcUrl).host; } catch (e) { host = rpcUrl; }
-        lastSuccessfulRpcHost = host;
-        if (node) {
-          node.latency = latency;
-          node.consecutiveErrors = 0;
-          node.lastSuccessTime = Date.now();
-        }
-        return { result: res.result, latency, rpcHost: host };
+        node.latency = latency;
+        node.consecutiveErrors = 0;
+        node.lastSuccessTime = Date.now();
+        updateActiveRpcHost(node.host);
+        return { result: res.result, latency, rpcHost: node.host };
       }
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
     } catch (e) {
-      // rotate RPC
-    }
-    if (node) {
       node.consecutiveErrors++;
       node.lastErrorTime = Date.now();
       node.latency = Math.max(node.latency || 500, 2000) + 500;
     }
-    currentRpcIdx = (currentRpcIdx + 1) % RPCS.length;
-    attempts++;
   }
   return { result: null, latency: 999, rpcHost: null };
 }
@@ -2115,7 +2132,10 @@ function addLog(tag, msg, projId = null) {
   row.dataset.tag = tag;
   row.dataset.project = projId || "";
 
-  row.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-tag-${tag}">[${tag}]</span> <span>${escapeHtml(msg)}</span>`;
+  // Sanitize msg to ensure no relay token or URL leaks into log lines or UI text
+  const safeMsg = typeof msg === "string" ? msg.replace(/https?:\/\/[^\s"']*(?:sslip\.io|\/rpc\/)[^\s"']*/gi, "自建中继·法兰克福") : String(msg);
+
+  row.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-tag-${tag}">[${tag}]</span> <span>${escapeHtml(safeMsg)}</span>`;
   updateLogLineVisibility(row);
   container.appendChild(row);
 
@@ -2714,7 +2734,8 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
 // ==========================================
 async function refreshTopBar() {
   // 1. Block Height & Latency
-  const { block, latency } = await ethBlockNumber();
+  const { block, latency, rpcHost } = await ethBlockNumber();
+  updateActiveRpcHost(rpcHost || lastSuccessfulRpcHost);
   if (block) {
     document.getElementById("blockHeight").textContent = `#${block.toLocaleString()}`;
     document.getElementById("rpcLatency").textContent = `${latency} ms`;
@@ -4559,7 +4580,7 @@ projects.forEach(p => {
 // Immediately trigger manifest sync on page load
 syncProjectsManifest();
 
-addLog("SYS", "Agent 打新交互看板已加载完成。纯原生 RPC 引擎就绪。");
+addLog("SYS", "Agent 打新交互看板已加载完成。v8 自建中继数据通道就绪。");
 
 // Periodic Timers
 // 1. Top bar block & balance: 3s
