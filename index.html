@@ -1011,7 +1011,7 @@
 
     <div class="price-highlight-row">
       <div>
-        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px">当前现价 (BNB / Token)</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-bottom:2px" id="curPriceLabel">当前现价 (BNB / Token)</div>
         <div class="main-price-val">
           <span id="curPriceBnb">—</span>
           <small id="curPriceUsd">($—)</small>
@@ -1113,7 +1113,7 @@
           <input type="number" id="sellSlippageInput" value="12" step="0.5" min="0.5" max="50">
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label>预计接收 BNB (Router)</label>
+          <label id="estReceiveLabel">预计接收 BNB (Router)</label>
           <div style="padding:7px 0; font-family:var(--font-mono); font-weight:700; color:var(--green)" id="estBnbOutput">0.0000 BNB</div>
         </div>
       </div>
@@ -1411,7 +1411,7 @@
         <span>滑点保护:</span> <b id="confSlippage">12%</b>
       </div>
       <div style="display:flex; justify-content:space-between; margin-bottom:6px">
-        <span>最少获得 BNB:</span> <b id="confMinBnb" style="color:var(--green)">0.0000 BNB</b>
+        <span id="confMinLabel">最少获得 BNB:</span> <b id="confMinBnb" style="color:var(--green)">0.0000 BNB</b>
       </div>
       <div style="display:flex; justify-content:space-between">
         <span>操作模式:</span> <b id="confMode" style="color:var(--amber)">模拟模式</b>
@@ -2183,7 +2183,8 @@ const PRESET_TOKEN_MAPPING = {
   "0xd4b9bfd03c19c0ac0dd3578be7a5cabd07a27772": { id: "gout", progressFn: "totalMinted", openedFn: "opened" },
   "0xf6720636bdfbe84973a487a9e70a5408f94f6029": { id: "akita", progressFn: "totalMinted", openedFn: "launched" },
   "0xdd5cc8755d8af6539dcfd73de31e07794bfdd30a": { id: "whale", progressFn: "sharesSold", openedFn: "" },
-  "0xc438821d5937e5246a50f877311a74e40f82eb87": { id: "broccoli", progressFn: "totalMinted", openedFn: "opened" }
+  "0xc438821d5937e5246a50f877311a74e40f82eb87": { id: "broccoli", progressFn: "totalMinted", openedFn: "opened" },
+  "0x2ca00e5f1cb8d2203e0e7f29e3630ff8405b8c98": { id: "fist", progressFn: "totalMinted", openedFn: "opened", quote: "USDT", pricePerShareQuote: 1 }
 };
 
 function normalizeProject(p) {
@@ -2196,8 +2197,15 @@ function normalizeProject(p) {
     if (!p.source) p.source = "sync";
     if (!p.progressFn) p.progressFn = preset.progressFn;
     if (p.openedFn === undefined) p.openedFn = preset.openedFn;
+    if (preset.quote && !p.quote) p.quote = preset.quote;
+    if (preset.pricePerShareQuote !== undefined && p.pricePerShareQuote === undefined) p.pricePerShareQuote = preset.pricePerShareQuote;
   } else {
     if (!p.source) p.source = "manual";
+  }
+
+  p.quote = p.quote || "WBNB";
+  if (p.quote === "USDT" && p.pricePerShareQuote === undefined) {
+    p.pricePerShareQuote = 1;
   }
 
   p.sale = p.sale || p.presale || "";
@@ -2338,6 +2346,21 @@ function applySyncedProjects(manifestProjects) {
       existing.sale = m.sale || m.presale || existing.sale;
       existing.presale = existing.sale;
       existing.pricePerShare = m.pricePerShare;
+      if (m.quote !== undefined) {
+        if (existing.quote !== m.quote) {
+          existing.quote = m.quote;
+          if (existing.token && tokenCache[existing.token.toLowerCase()]) {
+            delete tokenCache[existing.token.toLowerCase()].pair;
+          }
+        }
+      } else {
+        existing.quote = existing.quote || "WBNB";
+      }
+      if (m.pricePerShareQuote !== undefined) {
+        existing.pricePerShareQuote = m.pricePerShareQuote;
+      } else if (existing.quote === "USDT" && existing.pricePerShareQuote === undefined) {
+        existing.pricePerShareQuote = 1;
+      }
       existing.tokensPerShare = m.tokensPerShare;
       existing.totalShares = m.totalShares;
       existing.taxPct = m.taxPct !== undefined ? m.taxPct : (m.sellTax || 0);
@@ -2376,6 +2399,8 @@ function applySyncedProjects(manifestProjects) {
         sale: m.sale || m.presale || "",
         presale: m.sale || m.presale || "",
         pricePerShare: m.pricePerShare || 0,
+        quote: m.quote || "WBNB",
+        pricePerShareQuote: m.pricePerShareQuote !== undefined ? m.pricePerShareQuote : (m.quote === "USDT" ? 1 : undefined),
         tokensPerShare: m.tokensPerShare || 0,
         totalShares: m.totalShares || 10000,
         taxPct: m.taxPct !== undefined ? m.taxPct : (m.sellTax || 0),
@@ -2543,26 +2568,79 @@ async function fetchTokenMeta(tokenAddr) {
   return tokenCache[tokenAddr];
 }
 
-async function fetchPairAddress(tokenAddr) {
+function getProjectQuoteConfig(pOrToken) {
+  let quotePref = "WBNB";
+  if (typeof pOrToken === "string") {
+    const tokenLower = pOrToken.toLowerCase();
+    const proj = projects.find(item => item.token && item.token.toLowerCase() === tokenLower);
+    if (proj && proj.quote) quotePref = proj.quote;
+  } else if (pOrToken && pOrToken.quote) {
+    quotePref = pOrToken.quote;
+  }
+  const isUsdt = quotePref.toUpperCase() === "USDT";
+  return {
+    isUsdt,
+    primarySymbol: isUsdt ? "USDT" : "WBNB",
+    primaryAddr: isUsdt ? USDT : WBNB,
+    secondarySymbol: isUsdt ? "WBNB" : "USDT",
+    secondaryAddr: isUsdt ? WBNB : USDT
+  };
+}
+
+async function fetchPairAddress(tokenAddr, preferredQuote = null) {
+  if (!tokenAddr) return null;
   tokenAddr = tokenAddr.toLowerCase();
   if (tokenCache[tokenAddr] && tokenCache[tokenAddr].pair) {
     return tokenCache[tokenAddr].pair;
   }
-  const data = "0xe6a43905" + padAddress(tokenAddr) + padAddress(WBNB);
-  const { result } = await ethCall(FACTORY, data);
-  if (result && result.length >= 66) {
-    const pair = "0x" + result.slice(-40);
-    if (pair !== "0x0000000000000000000000000000000000000000") {
+
+  let cfg = getProjectQuoteConfig(tokenAddr);
+  if (preferredQuote) {
+    const isUsdt = preferredQuote.toUpperCase() === "USDT";
+    cfg = {
+      isUsdt,
+      primarySymbol: isUsdt ? "USDT" : "WBNB",
+      primaryAddr: isUsdt ? USDT : WBNB,
+      secondarySymbol: isUsdt ? "WBNB" : "USDT",
+      secondaryAddr: isUsdt ? WBNB : USDT
+    };
+  }
+
+  // 1. Try configured quote pair
+  const data1 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(cfg.primaryAddr);
+  const res1 = await ethCall(FACTORY, data1);
+  if (res1 && res1.result && res1.result.length >= 66) {
+    const pair1 = "0x" + res1.result.slice(-40);
+    if (pair1 !== "0x0000000000000000000000000000000000000000") {
       if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
-      tokenCache[tokenAddr].pair = pair;
-      return pair;
+      tokenCache[tokenAddr].pair = pair1;
+      tokenCache[tokenAddr].quoteSymbol = cfg.primarySymbol;
+      tokenCache[tokenAddr].quoteToken = cfg.primaryAddr;
+      tokenCache[tokenAddr].quoteDecimals = 18;
+      return pair1;
     }
   }
+
+  // 2. Fallback to alternative quote pair
+  const data2 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(cfg.secondaryAddr);
+  const res2 = await ethCall(FACTORY, data2);
+  if (res2 && res2.result && res2.result.length >= 66) {
+    const pair2 = "0x" + res2.result.slice(-40);
+    if (pair2 !== "0x0000000000000000000000000000000000000000") {
+      if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
+      tokenCache[tokenAddr].pair = pair2;
+      tokenCache[tokenAddr].quoteSymbol = cfg.secondarySymbol;
+      tokenCache[tokenAddr].quoteToken = cfg.secondaryAddr;
+      tokenCache[tokenAddr].quoteDecimals = 18;
+      return pair2;
+    }
+  }
+
   return null;
 }
 
 async function fetchPairReserves(pairAddr, tokenAddr) {
-  if (!pairAddr) return { wbnbReserve: 0n, tokenReserve: 0n };
+  if (!pairAddr) return { wbnbReserve: 0n, quoteReserve: 0n, tokenReserve: 0n, quoteSymbol: "WBNB" };
   const batchRes = await rpcBatchRequest([
     { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
     { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
@@ -2582,16 +2660,39 @@ async function fetchPairReserves(pairAddr, tokenAddr) {
   }
 
   if (!resHex || resHex.length < 130) {
-    return { wbnbReserve: 0n, tokenReserve: 0n };
+    return { wbnbReserve: 0n, quoteReserve: 0n, tokenReserve: 0n, quoteSymbol: "WBNB" };
   }
   const r0 = BigInt("0x" + resHex.slice(2, 66));
   const r1 = BigInt("0x" + resHex.slice(66, 130));
   const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
-  const isT0Wbnb = (t0 === WBNB.toLowerCase());
+  const tokenLower = (tokenAddr || "").toLowerCase();
 
-  const wbnbReserve = isT0Wbnb ? r0 : r1;
-  const tokenReserve = isT0Wbnb ? r1 : r0;
-  return { wbnbReserve, tokenReserve };
+  let isT0Token = (t0 === tokenLower);
+  if (t0 === WBNB.toLowerCase() || t0 === USDT.toLowerCase()) {
+    isT0Token = false;
+  }
+
+  const tokenReserve = isT0Token ? r0 : r1;
+  const quoteReserve = isT0Token ? r1 : r0;
+
+  let quoteSymbol = tokenCache[tokenLower]?.quoteSymbol;
+  if (!quoteSymbol) {
+    if (t0 === USDT.toLowerCase()) {
+      quoteSymbol = "USDT";
+    } else if (t0 === WBNB.toLowerCase()) {
+      quoteSymbol = "WBNB";
+    } else {
+      const proj = projects.find(item => item.token && item.token.toLowerCase() === tokenLower);
+      quoteSymbol = (proj?.quote || "WBNB").toUpperCase();
+    }
+  }
+
+  return {
+    wbnbReserve: quoteReserve,
+    quoteReserve,
+    tokenReserve,
+    quoteSymbol: quoteSymbol || "WBNB"
+  };
 }
 
 async function updateBnbUsdPrice() {
@@ -2761,14 +2862,23 @@ async function checkPresaleOpened(p) {
 }
 
 // Quote Pancake Router getAmountsOut
-async function quoteSell(amountInRaw, tokenAddr) {
+async function quoteSell(amountInRaw, tokenAddr, quoteAddr = null) {
   if (amountInRaw <= 0n) return 0n;
+  const tokenLower = (tokenAddr || "").toLowerCase();
+  let quoteToken = quoteAddr;
+  if (!quoteToken) {
+    quoteToken = tokenCache[tokenLower]?.quoteToken;
+    if (!quoteToken) {
+      const proj = projects.find(p => p.token && p.token.toLowerCase() === tokenLower);
+      quoteToken = (proj?.quote || "").toUpperCase() === "USDT" ? USDT : WBNB;
+    }
+  }
   let data = "0xd06ca61f";
   data += padUint256(amountInRaw);
   data += padUint256(64);
   data += padUint256(2);
   data += padAddress(tokenAddr);
-  data += padAddress(WBNB);
+  data += padAddress(quoteToken);
   const { result } = await ethCall(ROUTER, data);
   if (result && result.length >= 194) {
     const raw = result.replace(/^0x/, "");
@@ -3196,18 +3306,43 @@ function renderProgressCard(p, soldCount, totalCount, isSnapshot, statusSourceTe
 }
 
 // Render Card B: Price & Returns
-function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, isSnapshot) {
+function renderPriceCard(p, curPrice, quoteNorm, tokNorm, symbol, basePriceBnb, isSnapshot, quoteSymbolOverride = null) {
   const poolBadge = document.getElementById("poolStatusBadge");
   const banner = document.getElementById("strategyPrompt");
 
-  if (curPrice > 0) {
-    document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} BNB`;
-    const curPriceUsd = curPrice * bnbUsdPrice;
-    document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})`;
+  const tokenLower = (p.token || "").toLowerCase();
+  const actualQuote = (quoteSymbolOverride || tokenCache[tokenLower]?.quoteSymbol || p.state?.lastGood?.poolQuoteSymbol || p.quote || "WBNB").toUpperCase();
+  const isUsdt = (actualQuote === "USDT");
+  const quoteSymbol = isUsdt ? "USDT" : "WBNB";
 
-    const taxPct = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
-    const nomMult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
-    const taxDeduct = 1 - (taxPct / 100);
+  // Card B Subtitle
+  const subEl = document.getElementById("poolSubtitle");
+  if (subEl) {
+    subEl.textContent = isUsdt ? "代币与 USDT 兑换流动池" : "代币与 WBNB 兑换流动池";
+  }
+
+  // Price Label
+  const priceLbl = document.getElementById("curPriceLabel");
+  if (priceLbl) {
+    priceLbl.textContent = isUsdt ? "当前现价 (USDT / Token)" : "当前现价 (BNB / Token)";
+  }
+
+  const costPerShare = isUsdt ? (p.pricePerShareQuote || 1) : (p.pricePerShare || 0);
+  const tokensPerShare = p.tokensPerShare || 0;
+  const taxPct = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
+  const taxDeduct = 1 - (taxPct / 100);
+
+  if (curPrice > 0) {
+    if (isUsdt) {
+      document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} USDT`;
+      document.getElementById("curPriceUsd").textContent = `($${curPrice.toExponential(3)})`;
+    } else {
+      document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} BNB`;
+      const curPriceUsd = curPrice * bnbUsdPrice;
+      document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})`;
+    }
+
+    const nomMult = (tokensPerShare > 0 && costPerShare > 0) ? (curPrice * tokensPerShare / costPerShare) : 0;
     const netMult = nomMult * taxDeduct;
 
     const nomEl = document.getElementById("nominalMultiple");
@@ -3219,21 +3354,36 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
     netEl.className = `multiple-pill ${netMult >= 1 ? "mult-pos" : "mult-neg"}`;
 
     // 1 Share Return (net)
-    const oneShareBnb = (p.tokensPerShare || 0) * curPrice * taxDeduct;
-    const oneShareUsd = oneShareBnb * bnbUsdPrice;
-    document.getElementById("oneShareReturnVal").textContent = `${oneShareBnb.toFixed(4)} BNB ($${oneShareUsd.toFixed(1)})`;
+    if (isUsdt) {
+      const oneShareUsdt = tokensPerShare * curPrice * taxDeduct;
+      const oneShareBnb = bnbUsdPrice > 0 ? (oneShareUsdt / bnbUsdPrice) : 0;
+      document.getElementById("oneShareReturnVal").textContent = `${oneShareUsdt.toFixed(4)} USDT (≈${oneShareBnb.toFixed(4)} BNB)`;
+    } else {
+      const oneShareBnb = tokensPerShare * curPrice * taxDeduct;
+      const oneShareUsd = oneShareBnb * bnbUsdPrice;
+      document.getElementById("oneShareReturnVal").textContent = `${oneShareBnb.toFixed(4)} BNB ($${oneShareUsd.toFixed(1)})`;
+    }
 
     // My PnL
     const held = p.heldShares || 0;
     if (held > 0) {
-      const curValBnb = held * (p.tokensPerShare || 0) * curPrice * taxDeduct;
-      const costBnb = held * (p.pricePerShare || 0);
-      const pnlBnb = curValBnb - costBnb;
-      const pnlPct = costBnb > 0 ? (pnlBnb / costBnb * 100) : 0;
-      const isProf = pnlBnb >= 0;
-      document.getElementById("unrealizedPnlVal").innerHTML = `<span style="color:${isProf ? 'var(--green)' : 'var(--red)'}">${isProf ? '+' : ''}${pnlBnb.toFixed(4)} BNB (${pnlPct.toFixed(1)}%)</span>`;
+      if (isUsdt) {
+        const curValUsdt = held * tokensPerShare * curPrice * taxDeduct;
+        const totalCostUsdt = held * costPerShare;
+        const pnlUsdt = curValUsdt - totalCostUsdt;
+        const pnlPct = totalCostUsdt > 0 ? (pnlUsdt / totalCostUsdt * 100) : 0;
+        const isProf = pnlUsdt >= 0;
+        document.getElementById("unrealizedPnlVal").innerHTML = `<span style="color:${isProf ? 'var(--green)' : 'var(--red)'}">${isProf ? '+' : ''}${pnlUsdt.toFixed(2)} USDT (${pnlPct.toFixed(1)}%)</span>`;
+      } else {
+        const curValBnb = held * tokensPerShare * curPrice * taxDeduct;
+        const totalCostBnb = held * costPerShare;
+        const pnlBnb = curValBnb - totalCostBnb;
+        const pnlPct = totalCostBnb > 0 ? (pnlBnb / totalCostBnb * 100) : 0;
+        const isProf = pnlBnb >= 0;
+        document.getElementById("unrealizedPnlVal").innerHTML = `<span style="color:${isProf ? 'var(--green)' : 'var(--red)'}">${isProf ? '+' : ''}${pnlBnb.toFixed(4)} BNB (${pnlPct.toFixed(1)}%)</span>`;
+      }
     } else {
-      document.getElementById("unrealizedPnlVal").textContent = "0.0000 BNB";
+      document.getElementById("unrealizedPnlVal").textContent = isUsdt ? "0.00 USDT" : "0.0000 BNB";
     }
 
     poolBadge.textContent = "已开盘";
@@ -3241,7 +3391,12 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
 
     const resTokStr = tokNorm > 1e9 ? (tokNorm/1e9).toFixed(2)+'B' : (tokNorm/1e6).toFixed(2)+'M';
     const snapResNotice = isSnapshot ? `<span style="color:var(--amber); font-size:11px"> (快照)</span>` : "";
-    document.getElementById("poolReservesSummary").innerHTML = `${wbnbNorm.toFixed(2)} WBNB / ${resTokStr} ${escapeHtml(symbol)}${snapResNotice}`;
+    if (isUsdt) {
+      const qStr = (quoteNorm || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById("poolReservesSummary").innerHTML = `${qStr} USDT / ${resTokStr} ${escapeHtml(symbol)}${snapResNotice}`;
+    } else {
+      document.getElementById("poolReservesSummary").innerHTML = `${(quoteNorm || 0).toFixed(2)} WBNB / ${resTokStr} ${escapeHtml(symbol)}${snapResNotice}`;
+    }
 
     if (p.state && p.state.openedAt) {
       const durationHours = (Date.now() - p.state.openedAt) / 3600000;
@@ -3260,8 +3415,7 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
       const lastL = lastLogTime[p.id] || 0;
       if (Date.now() - lastL >= 5000) {
         lastLogTime[p.id] = Date.now();
-        const mult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
-        addLog("PRICE", `${p.name} 现价: ${curPrice.toExponential(4)} BNB (名义: ${mult.toFixed(2)}x)`, p.id);
+        addLog("PRICE", `${p.name} 现价: ${curPrice.toExponential(4)} ${quoteSymbol} (名义: ${nomMult.toFixed(2)}x)`, p.id);
       }
     }
 
@@ -3282,10 +3436,17 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
 
   } else {
     // curPrice <= 0
-    if (p.state && p.state.openedLatched) {
+    const cachedPair = tokenCache[tokenLower]?.pair;
+    const isOpened = !!(p.state && p.state.openedLatched);
+
+    if (isOpened) {
       poolBadge.textContent = "已开盘";
       poolBadge.className = "tab-badge badge-opened";
       document.getElementById("poolReservesSummary").textContent = "已探明开盘 (等待储备读数)";
+    } else if (cachedPair) {
+      poolBadge.textContent = "已开盘";
+      poolBadge.className = "tab-badge badge-opened";
+      document.getElementById("poolReservesSummary").textContent = "流动池已建立 (等待储备读数)";
     } else {
       poolBadge.textContent = "无池/未开盘";
       poolBadge.className = "tab-badge badge-unopened";
@@ -3297,11 +3458,16 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
     document.getElementById("nominalMultiple").className = "multiple-pill mult-neutral";
     document.getElementById("netMultiple").textContent = "—x";
     document.getElementById("netMultiple").className = "multiple-pill mult-neutral";
-    document.getElementById("oneShareReturnVal").textContent = "— BNB";
+    document.getElementById("oneShareReturnVal").textContent = isUsdt ? "— USDT" : "— BNB";
     document.getElementById("unrealizedPnlVal").textContent = "—";
     document.getElementById("poolDuration").textContent = (p.state && p.state.openedAt) ? `${Math.floor((Date.now() - p.state.openedAt) / 60000)} 分钟` : "—";
+    
     banner.className = "strategy-banner strat-alert-neutral";
-    banner.innerHTML = `💡 [提示] 该项目流动池未建立或无储备，等待发售完成上池`;
+    if (isOpened || cachedPair) {
+      banner.innerHTML = isOpened ? `💡 [提示] 项目已开盘，等待池储备读数就绪` : `💡 [提示] 流动池已探测到，等待储备读数注入`;
+    } else {
+      banner.innerHTML = `💡 [提示] 该项目流动池未建立或无储备，等待发售完成上池`;
+    }
   }
 }
 
@@ -3411,13 +3577,28 @@ async function refreshActiveProject() {
     }
 
     // Base price per token: pricePerShare / tokensPerShare
-    const basePriceBnb = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
-    document.getElementById("benchmarkPrice").textContent = `${p.pricePerShare} BNB (${basePriceBnb.toExponential(4)}/枚)`;
-    document.getElementById("perShareDesc").textContent = `${p.pricePerShare} BNB = ${Number(p.tokensPerShare).toLocaleString()} 枚`;
-    document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
-    const myCostBnb = (p.heldShares || 0) * (p.pricePerShare || 0);
-    document.getElementById("myCostSummary").textContent = `份 = ${myCostBnb.toFixed(4)} BNB ($${(myCostBnb * bnbUsdPrice).toFixed(1)})`;
+    const quoteCfg = getProjectQuoteConfig(p);
+    const isUsdt = quoteCfg.isUsdt;
+    const costPerShare = isUsdt ? (p.pricePerShareQuote || 1) : (p.pricePerShare || 0);
+    const basePrice = (costPerShare && p.tokensPerShare) ? (costPerShare / p.tokensPerShare) : 0;
+    const basePriceBnb = basePrice;
+    if (isUsdt) {
+      document.getElementById("benchmarkPrice").textContent = `${costPerShare} USDT (${basePrice.toExponential(4)}/枚)`;
+      document.getElementById("perShareDesc").textContent = `${costPerShare} USDT = ${Number(p.tokensPerShare).toLocaleString()} 枚`;
+      document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
+      const myCostUsdt = (p.heldShares || 0) * costPerShare;
+      document.getElementById("myCostSummary").textContent = `份 = ${myCostUsdt.toFixed(2)} USDT ($${myCostUsdt.toFixed(2)})`;
+    } else {
+      document.getElementById("benchmarkPrice").textContent = `${p.pricePerShare} BNB (${basePriceBnb.toExponential(4)}/枚)`;
+      document.getElementById("perShareDesc").textContent = `${p.pricePerShare} BNB = ${Number(p.tokensPerShare).toLocaleString()} 枚`;
+      document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
+      const myCostBnb = (p.heldShares || 0) * (p.pricePerShare || 0);
+      document.getElementById("myCostSummary").textContent = `份 = ${myCostBnb.toFixed(4)} BNB ($${(myCostBnb * bnbUsdPrice).toFixed(1)})`;
+    }
     document.getElementById("sellProjectTax").textContent = `${p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0)}%`;
+
+    const estReceiveLabel = document.getElementById("estReceiveLabel");
+    if (estReceiveLabel) estReceiveLabel.textContent = `预计接收 ${quoteCfg.primarySymbol} (Router)`;
 
     // Countdown & Time status
     const now = Date.now();
@@ -3458,10 +3639,10 @@ async function refreshActiveProject() {
       updateStatusBadges(p, initialStatus.status, initialStatus.badgeClass);
 
       if (p.state?.lastGood && p.state.lastGood.price > 0) {
-        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceBnb, true);
+        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceBnb, true, p.state.lastGood.poolQuoteSymbol || quoteCfg.primarySymbol);
         renderProgressCard(p, initialSold, totalCount, true, null);
       } else {
-        renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false);
+        renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false, quoteCfg.primarySymbol);
         renderProgressCard(p, initialSold, totalCount, false, p.manualSold ? "手动录入" : "等待链上读取");
       }
       setSnapshotBadgeState(true, true, false, snapTs);
@@ -3524,8 +3705,10 @@ async function refreshActiveProject() {
         batch1Calls.push({ id: "reserves", method: "eth_call", params: [{ to: cachedPair, data: "0x0902f1ac" }, "latest"] });
         batch1Calls.push({ id: "token0", method: "eth_call", params: [{ to: cachedPair, data: "0x0dfe1681" }, "latest"] });
       } else if (tokenAddr) {
-        const pairData = "0xe6a43905" + padAddress(tokenAddr) + padAddress(WBNB);
-        batch1Calls.push({ id: "factory_pair", method: "eth_call", params: [{ to: FACTORY, data: pairData }, "latest"] });
+        const pairData1 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(quoteCfg.primaryAddr);
+        batch1Calls.push({ id: "factory_pair", method: "eth_call", params: [{ to: FACTORY, data: pairData1 }, "latest"] });
+        const pairData2 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(quoteCfg.secondaryAddr);
+        batch1Calls.push({ id: "factory_pair_alt", method: "eth_call", params: [{ to: FACTORY, data: pairData2 }, "latest"] });
       }
 
       if (hasWallet && tokenAddr) {
@@ -3593,25 +3776,54 @@ async function refreshActiveProject() {
         let pairAddr = cachedPair;
         let resHex = b1.results.reserves;
         let t0Hex = b1.results.token0;
+        let matchedQuoteSymbol = tokenCache[tokenAddr]?.quoteSymbol || quoteCfg.primarySymbol;
+        let matchedQuoteAddr = tokenCache[tokenAddr]?.quoteToken || quoteCfg.primaryAddr;
 
-        if (!pairAddr && b1.results.factory_pair) {
-          const fRes = b1.results.factory_pair;
-          if (fRes && fRes.length >= 66) {
-            const pairFound = "0x" + fRes.slice(-40);
-            if (pairFound !== "0x0000000000000000000000000000000000000000") {
-              pairAddr = pairFound;
-              if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
-              tokenCache[tokenAddr].pair = pairAddr;
+        if (!pairAddr && (b1.results.factory_pair || b1.results.factory_pair_alt)) {
+          let foundPair = null;
+          let foundSymbol = quoteCfg.primarySymbol;
+          let foundAddr = quoteCfg.primaryAddr;
 
-              // Batch 2: Newly discovered pair, query reserves & token0 in a 2nd batch (<= 2 roundtrips)
-              const b2 = await rpcBatchRequest([
-                { id: "reserves", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
-                { id: "token0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
-              ]);
-              if (b2.success) {
-                resHex = b2.results.reserves;
-                t0Hex = b2.results.token0;
+          const fRes1 = b1.results.factory_pair;
+          if (fRes1 && fRes1.length >= 66) {
+            const p1 = "0x" + fRes1.slice(-40);
+            if (p1 !== "0x0000000000000000000000000000000000000000") {
+              foundPair = p1;
+              foundSymbol = quoteCfg.primarySymbol;
+              foundAddr = quoteCfg.primaryAddr;
+            }
+          }
+
+          if (!foundPair && b1.results.factory_pair_alt) {
+            const fRes2 = b1.results.factory_pair_alt;
+            if (fRes2 && fRes2.length >= 66) {
+              const p2 = "0x" + fRes2.slice(-40);
+              if (p2 !== "0x0000000000000000000000000000000000000000") {
+                foundPair = p2;
+                foundSymbol = quoteCfg.secondarySymbol;
+                foundAddr = quoteCfg.secondaryAddr;
               }
+            }
+          }
+
+          if (foundPair) {
+            pairAddr = foundPair;
+            matchedQuoteSymbol = foundSymbol;
+            matchedQuoteAddr = foundAddr;
+            if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
+            tokenCache[tokenAddr].pair = pairAddr;
+            tokenCache[tokenAddr].quoteSymbol = matchedQuoteSymbol;
+            tokenCache[tokenAddr].quoteToken = matchedQuoteAddr;
+            tokenCache[tokenAddr].quoteDecimals = 18;
+
+            // Batch 2: Newly discovered pair, query reserves & token0 in a 2nd batch (<= 2 roundtrips)
+            const b2 = await rpcBatchRequest([
+              { id: "reserves", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
+              { id: "token0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
+            ]);
+            if (b2.success) {
+              resHex = b2.results.reserves;
+              t0Hex = b2.results.token0;
             }
           }
         }
@@ -3620,13 +3832,27 @@ async function refreshActiveProject() {
           const r0 = BigInt("0x" + resHex.slice(2, 66));
           const r1 = BigInt("0x" + resHex.slice(66, 130));
           const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
-          const isT0Wbnb = (t0 === WBNB.toLowerCase());
-          const wbnbReserve = isT0Wbnb ? r0 : r1;
-          const tokenReserve = isT0Wbnb ? r1 : r0;
-          if (wbnbReserve > 0n && tokenReserve > 0n) {
+
+          let isT0Token = (t0 === tokenAddr.toLowerCase());
+          if (t0 === WBNB.toLowerCase() || t0 === USDT.toLowerCase()) {
+            isT0Token = false;
+          }
+
+          const tokenReserve = isT0Token ? r0 : r1;
+          const quoteReserve = isT0Token ? r1 : r0;
+
+          if (t0 === USDT.toLowerCase()) {
+            matchedQuoteSymbol = "USDT";
+            matchedQuoteAddr = USDT;
+          } else if (t0 === WBNB.toLowerCase()) {
+            matchedQuoteSymbol = "WBNB";
+            matchedQuoteAddr = WBNB;
+          }
+
+          if (quoteReserve > 0n && tokenReserve > 0n) {
             isPoolActive = true;
             liveEvidence.isPoolActive = true;
-            wbnbNorm = Number(wbnbReserve) / 1e18;
+            wbnbNorm = Number(quoteReserve) / 1e18;
             tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
             curPrice = wbnbNorm / tokNorm;
           }
@@ -3666,7 +3892,7 @@ async function refreshActiveProject() {
         }
 
         meta = await fetchTokenMeta(p.token);
-        const pairAddr = await fetchPairAddress(p.token);
+        const pairAddr = await fetchPairAddress(p.token, p.quote);
 
         const asyncTasks = [
           !p.state?.noProgressFn ? readPresaleSoldShares(p) : Promise.resolve({ success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" }),
@@ -3687,13 +3913,14 @@ async function refreshActiveProject() {
         }
 
         if (pairAddr && results[2]) {
-          const { wbnbReserve, tokenReserve } = results[2];
-          if (wbnbReserve > 0n && tokenReserve > 0n) {
+          const { quoteReserve, tokenReserve, quoteSymbol: pairQuoteSym } = results[2];
+          if (quoteReserve > 0n && tokenReserve > 0n) {
             isPoolActive = true;
             liveEvidence.isPoolActive = true;
-            wbnbNorm = Number(wbnbReserve) / 1e18;
+            wbnbNorm = Number(quoteReserve) / 1e18;
             tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
             curPrice = wbnbNorm / tokNorm;
+            if (pairQuoteSym) matchedQuoteSymbol = pairQuoteSym;
           }
         }
 
@@ -3733,6 +3960,7 @@ async function refreshActiveProject() {
         price: curPrice > 0 ? curPrice : (p.state.lastGood?.price || 0),
         sold: Math.max(p.state.soldHighWater || 0, soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || 0)),
         poolWBNB: isPoolActive ? wbnbNorm : (p.state.lastGood?.poolWBNB || 0),
+        poolQuoteSymbol: matchedQuoteSymbol || p.state.lastGood?.poolQuoteSymbol || quoteCfg.primarySymbol,
         poolToken: isPoolActive ? tokNorm : (p.state.lastGood?.poolToken || 0),
         symbol: meta.symbol,
         decimals: meta.decimals,
@@ -3757,9 +3985,9 @@ async function refreshActiveProject() {
       const effectiveSold = Math.max(p.state.soldHighWater || 0, p.state.lastGood?.sold || 0, p.manualSold || 0);
       renderProgressCard(p, effectiveSold, totalCount, true, "链上读取失败，保留快照");
       if (p.state.lastGood && p.state.lastGood.price > 0) {
-        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || meta.symbol, basePriceBnb, true);
+        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || meta.symbol, basePriceBnb, true, p.state.lastGood.poolQuoteSymbol || quoteCfg.primarySymbol);
       } else {
-        renderPriceCard(p, 0, 0, 0, meta.symbol, basePriceBnb, false);
+        renderPriceCard(p, 0, 0, 0, meta.symbol, basePriceBnb, false, quoteCfg.primarySymbol);
       }
       setSnapshotBadgeState(true, false, true, snapTs);
 
@@ -3769,13 +3997,13 @@ async function refreshActiveProject() {
       // Success branch: atomically render fresh Progress Card and Price Card
       const finalSold = Math.max(p.state.soldHighWater || 0, soldInfo.success ? soldInfo.sold : 0, p.manualSold || 0);
       renderProgressCard(p, finalSold, totalCount, false, soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : (p.manualSold ? "手动录入" : "未能自动探通"));
-      renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
+      renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false, matchedQuoteSymbol);
 
       // Remove snapshot badge and clear dimming
       setSnapshotBadgeState(false, false, false);
 
       // Log POLL success
-      const poolPriceStr = (isPoolActive && curPrice > 0) ? `${curPrice.toExponential(4)} BNB` : "未开池";
+      const poolPriceStr = (isPoolActive && curPrice > 0) ? `${curPrice.toExponential(4)} ${matchedQuoteSymbol}` : "未开池";
       const pctStr = ((finalSold / totalCount) * 100).toFixed(1);
       const blockStr = block ? `#${block}` : (p.state.lastAppliedBlock ? `#${p.state.lastAppliedBlock}` : "—");
       addLog("POLL", `${p.name} · 块 ${blockStr} · 进度 ${finalSold}/${totalCount}（${pctStr}%）· 池价 ${poolPriceStr} · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
@@ -3788,6 +4016,7 @@ async function refreshActiveProject() {
     if (!balanceUpdatedInBatch) {
       await refreshSellCardBalance(p, meta);
     }
+    recalculateSellQuote();
 
   } finally {
     projectRefreshInProgress.delete(p.id);
@@ -4090,25 +4319,40 @@ async function recalculateSellQuote() {
   const p = projects[activeProjectIdx];
   if (!p) return;
   const meta = await fetchTokenMeta(p.token);
+  const tokenLower = (p.token || "").toLowerCase();
+  const actualQuote = (tokenCache[tokenLower]?.quoteSymbol || p.state?.lastGood?.poolQuoteSymbol || p.quote || "WBNB").toUpperCase();
+  const isUsdt = (actualQuote === "USDT");
+  const quoteSymbol = isUsdt ? "USDT" : "WBNB";
+  const quoteAddr = isUsdt ? USDT : WBNB;
+
+  const lblEl = document.getElementById("estReceiveLabel");
+  if (lblEl) lblEl.textContent = `预计接收 ${quoteSymbol} (Router)`;
+
   const inputVal = parseFloat(document.getElementById("sellAmountInput").value);
   if (isNaN(inputVal) || inputVal <= 0) {
-    document.getElementById("estBnbOutput").textContent = "0.0000 BNB";
+    document.getElementById("estBnbOutput").textContent = `0.0000 ${quoteSymbol}`;
     document.getElementById("quoteDetailsBox").textContent = "等待输入卖出数量进行路由报价...";
     return;
   }
 
   const rawAmountIn = BigInt(Math.floor(inputVal * (10 ** meta.decimals)));
   try {
-    const rawAmountOut = await quoteSell(rawAmountIn, p.token);
-    const bnbOut = Number(rawAmountOut) / 1e18;
+    const rawAmountOut = await quoteSell(rawAmountIn, p.token, quoteAddr);
+    const quoteOut = Number(rawAmountOut) / 1e18;
     const slip = parseFloat(document.getElementById("sellSlippageInput").value) || 12;
-    const minBnbOut = bnbOut * (1 - (slip / 100));
+    const minQuoteOut = quoteOut * (1 - (slip / 100));
 
-    document.getElementById("estBnbOutput").textContent = `${bnbOut.toFixed(4)} BNB ($${(bnbOut * bnbUsdPrice).toFixed(2)})`;
+    if (isUsdt) {
+      document.getElementById("estBnbOutput").textContent = `${quoteOut.toFixed(4)} USDT ($${quoteOut.toFixed(2)})`;
+    } else {
+      document.getElementById("estBnbOutput").textContent = `${quoteOut.toFixed(4)} BNB ($${(quoteOut * bnbUsdPrice).toFixed(2)})`;
+    }
+
+    const taxVal = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
     document.getElementById("quoteDetailsBox").innerHTML = `
-      <div>路由预估获得: <b>${bnbOut.toFixed(6)} BNB</b></div>
-      <div>扣除滑点 (${slip}%): <b>最少获得 ${minBnbOut.toFixed(6)} BNB</b></div>
-      <div>代币扣税预估: <b>${p.sellTax}%</b></div>
+      <div>路由预估获得: <b>${quoteOut.toFixed(6)} ${quoteSymbol}</b></div>
+      <div>扣除滑点 (${slip}%): <b>最少获得 ${minQuoteOut.toFixed(6)} ${quoteSymbol}</b></div>
+      <div>代币扣税预估: <b>${taxVal}%</b></div>
     `;
   } catch (e) {
     document.getElementById("estBnbOutput").textContent = "报价失败 (可能无池)";
@@ -4193,19 +4437,27 @@ document.getElementById("btnExecuteSell").addEventListener("click", async () => 
     return;
   }
 
+  const tokenLower = (p.token || "").toLowerCase();
+  const actualQuote = (tokenCache[tokenLower]?.quoteSymbol || p.state?.lastGood?.poolQuoteSymbol || p.quote || "WBNB").toUpperCase();
+  const isUsdt = (actualQuote === "USDT");
+  const quoteSymbol = isUsdt ? "USDT" : "WBNB";
+  const quoteAddr = isUsdt ? USDT : WBNB;
+
   // Preflight calculations
   const rawAmountIn = BigInt(Math.floor(inputVal * (10 ** meta.decimals)));
-  let estBnb = 0;
+  let estQuote = 0;
   try {
-    const rawOut = await quoteSell(rawAmountIn, p.token);
-    estBnb = Number(rawOut) / 1e18;
+    const rawOut = await quoteSell(rawAmountIn, p.token, quoteAddr);
+    estQuote = Number(rawOut) / 1e18;
   } catch (e) {}
-  const minBnb = estBnb * (1 - (slip / 100));
+  const minQuote = estQuote * (1 - (slip / 100));
 
   document.getElementById("confToken").textContent = `${p.name} (${meta.symbol})`;
   document.getElementById("confAmount").textContent = `${inputVal.toLocaleString()} ${meta.symbol}`;
   document.getElementById("confSlippage").textContent = `${slip}%`;
-  document.getElementById("confMinBnb").textContent = `${minBnb.toFixed(6)} BNB`;
+  const confMinLabel = document.getElementById("confMinLabel");
+  if (confMinLabel) confMinLabel.textContent = `最少获得 ${quoteSymbol}:`;
+  document.getElementById("confMinBnb").textContent = `${minQuote.toFixed(6)} ${quoteSymbol}`;
   document.getElementById("confMode").textContent = simulationMode ? "【模拟模式】(仅写日志，不发交易)" : "【真实链上交易】(钱包亲自签名)";
   document.getElementById("confMode").style.color = simulationMode ? "var(--amber)" : "var(--red)";
 
@@ -4223,6 +4475,11 @@ document.getElementById("btnFinalSign").addEventListener("click", async () => {
   const inputVal = parseFloat(document.getElementById("sellAmountInput").value);
   const slip = parseFloat(document.getElementById("sellSlippageInput").value) || 12;
   const rawAmountIn = BigInt(Math.floor(inputVal * (10 ** meta.decimals)));
+
+  const tokenLower = (p.token || "").toLowerCase();
+  const actualQuote = (tokenCache[tokenLower]?.quoteSymbol || p.state?.lastGood?.poolQuoteSymbol || p.quote || "WBNB").toUpperCase();
+  const isUsdt = (actualQuote === "USDT");
+  const quoteAddr = isUsdt ? USDT : WBNB;
 
   if (simulationMode) {
     addLog("SIM", `[模拟卖出] 项目: ${p.name}, 数量: ${inputVal} ${meta.symbol}, 滑点: ${slip}%, 模拟成功 (未向链上发送交易)`, p.id);
@@ -4253,20 +4510,34 @@ document.getElementById("btnFinalSign").addEventListener("click", async () => {
     }
 
     // 2. Execute Swap
-    const rawOut = await quoteSell(rawAmountIn, p.token);
+    const rawOut = await quoteSell(rawAmountIn, p.token, quoteAddr);
     const rawMinOut = (rawOut * BigInt(Math.floor((100 - slip) * 100))) / 10000n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    // swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)
-    let swapData = "0x791ac947";
-    swapData += padUint256(rawAmountIn);
-    swapData += padUint256(rawMinOut);
-    swapData += padUint256(160); // offset 0xa0
-    swapData += padAddress(connectedWalletAddress);
-    swapData += padUint256(deadline);
-    swapData += padUint256(2);
-    swapData += padAddress(p.token);
-    swapData += padAddress(WBNB);
+    let swapData = "";
+    if (isUsdt) {
+      // swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)
+      swapData = "0x5c11d795";
+      swapData += padUint256(rawAmountIn);
+      swapData += padUint256(rawMinOut);
+      swapData += padUint256(160); // offset 0xa0
+      swapData += padAddress(connectedWalletAddress);
+      swapData += padUint256(deadline);
+      swapData += padUint256(2);
+      swapData += padAddress(p.token);
+      swapData += padAddress(USDT);
+    } else {
+      // swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)
+      swapData = "0x791ac947";
+      swapData += padUint256(rawAmountIn);
+      swapData += padUint256(rawMinOut);
+      swapData += padUint256(160); // offset 0xa0
+      swapData += padAddress(connectedWalletAddress);
+      swapData += padUint256(deadline);
+      swapData += padUint256(2);
+      swapData += padAddress(p.token);
+      swapData += padAddress(WBNB);
+    }
 
     const txSwap = await window.ethereum.request({
       method: "eth_sendTransaction",
@@ -4296,7 +4567,9 @@ function getBuiltinBotKey(projectId) {
 }
 
 function getDefaultBuiltinBot(p) {
-  const basePrice = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
+  const isUsdt = (p.quote || "").toUpperCase() === "USDT";
+  const costPerShare = isUsdt ? (p.pricePerShareQuote || 1) : (p.pricePerShare || 0);
+  const basePrice = (costPerShare && p.tokensPerShare) ? (costPerShare / p.tokensPerShare) : 0;
   return {
     projectId: p.id,
     ladderEnabled: false,
@@ -4441,17 +4714,21 @@ async function checkInstantSellEvidence(p) {
         const r0 = BigInt("0x" + resHex.slice(2, 66));
         const r1 = BigInt("0x" + resHex.slice(66, 130));
         const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
-        const isT0Wbnb = (t0 === WBNB.toLowerCase());
-        const wbnbReserve = isT0Wbnb ? r0 : r1;
-        const tokenReserve = isT0Wbnb ? r1 : r0;
-        if (wbnbReserve > 0n && tokenReserve > 0n) {
+        let isT0Token = (t0 === tokenAddr);
+        if (t0 === WBNB.toLowerCase() || t0 === USDT.toLowerCase()) {
+          isT0Token = false;
+        }
+        const tokenReserve = isT0Token ? r0 : r1;
+        const quoteReserve = isT0Token ? r1 : r0;
+        const quoteSymbol = (tokenCache[tokenAddr]?.quoteSymbol || (t0 === USDT.toLowerCase() ? "USDT" : (t0 === WBNB.toLowerCase() ? "WBNB" : (p.quote || "WBNB")))).toUpperCase();
+        if (quoteReserve > 0n && tokenReserve > 0n) {
           const meta = await fetchTokenMeta(p.token);
           const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
           try {
-            const quoteOut = await quoteSell(testAmount, p.token);
+            const quoteOut = await quoteSell(testAmount, p.token, quoteSymbol === "USDT" ? USDT : WBNB);
             if (quoteOut > 0n) {
               p.state.openedLatched = true;
-              return { triggered: true, reason: "流动池双边储备正常 (" + (Number(wbnbReserve)/1e18).toFixed(2) + " BNB) 且 Router 成功报价" };
+              return { triggered: true, reason: "流动池双边储备正常 (" + (Number(quoteReserve)/1e18).toFixed(2) + " " + quoteSymbol + ") 且 Router 成功报价" };
             }
           } catch (e) {}
         }
@@ -4469,17 +4746,17 @@ async function checkInstantSellEvidence(p) {
   }
 
   // 2. Check pair reserves on both sides > 0 and Router can quote
-  const pAddr = pairAddr || await fetchPairAddress(p.token);
+  const pAddr = pairAddr || await fetchPairAddress(p.token, p.quote);
   if (pAddr) {
-    const { wbnbReserve, tokenReserve } = await fetchPairReserves(pAddr, p.token);
-    if (wbnbReserve > 0n && tokenReserve > 0n) {
+    const { quoteReserve, tokenReserve, quoteSymbol } = await fetchPairReserves(pAddr, p.token);
+    if (quoteReserve > 0n && tokenReserve > 0n) {
       const meta = await fetchTokenMeta(p.token);
       const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
       try {
-        const quoteOut = await quoteSell(testAmount, p.token);
+        const quoteOut = await quoteSell(testAmount, p.token, quoteSymbol === "USDT" ? USDT : WBNB);
         if (quoteOut > 0n) {
           p.state.openedLatched = true;
-          return { triggered: true, reason: "流动池双边储备正常 (" + (Number(wbnbReserve)/1e18).toFixed(2) + " BNB) 且 Router 成功报价" };
+          return { triggered: true, reason: "流动池双边储备正常 (" + (Number(quoteReserve)/1e18).toFixed(2) + " " + quoteSymbol + ") 且 Router 成功报价" };
         }
       } catch (e) {}
     }
@@ -4490,7 +4767,8 @@ async function checkInstantSellEvidence(p) {
     const meta = await fetchTokenMeta(p.token);
     const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
     try {
-      const quoteOut = await quoteSell(testAmount, p.token);
+      const isUsdt = (tokenCache[p.token.toLowerCase()]?.quoteSymbol || p.quote || "").toUpperCase() === "USDT";
+      const quoteOut = await quoteSell(testAmount, p.token, isUsdt ? USDT : WBNB);
       if (quoteOut > 0n) {
         return { triggered: true, reason: "项目已处于锁定开盘 (openedLatched) 且 Router 成功报价" };
       }
@@ -4539,12 +4817,14 @@ async function pollBuiltinBotCycle(b, p) {
   // 2. Check Switch A: Ladder Take-Profit
   if (b.ladderEnabled) {
     const meta = await fetchTokenMeta(p.token);
-    const pairAddr = await fetchPairAddress(p.token);
+    const pairAddr = await fetchPairAddress(p.token, p.quote);
     if (pairAddr) {
-      const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
-      if (wbnbReserve > 0n && tokenReserve > 0n) {
-        curPrice = (Number(wbnbReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
-        const costPrice = b.costPrice || (p.pricePerShare / p.tokensPerShare);
+      const { quoteReserve, tokenReserve, quoteSymbol } = await fetchPairReserves(pairAddr, p.token);
+      if (quoteReserve > 0n && tokenReserve > 0n) {
+        curPrice = (Number(quoteReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
+        const isUsdt = (quoteSymbol === "USDT" || (p.quote || "").toUpperCase() === "USDT");
+        const defaultCostPrice = isUsdt ? ((p.pricePerShareQuote || 1) / p.tokensPerShare) : (p.pricePerShare / p.tokensPerShare);
+        const costPrice = b.costPrice || defaultCostPrice;
         if (costPrice > 0) {
           mult = curPrice / costPrice;
           b.curMultiple = mult;
@@ -4599,7 +4879,8 @@ async function pollBuiltinBotCycle(b, p) {
     const total = p.totalShares || 10000;
     const pct = ((sold / total) * 100).toFixed(1);
     const effectivePrice = curPrice > 0 ? curPrice : (p.state?.lastGood?.price || 0);
-    const priceStr = effectivePrice > 0 ? `${effectivePrice.toExponential(4)} BNB` : "未开池";
+    const quoteSym = tokenCache[p.token?.toLowerCase()]?.quoteSymbol || p.quote || "WBNB";
+    const priceStr = effectivePrice > 0 ? `${effectivePrice.toExponential(4)} ${quoteSym}` : "未开池";
     const multStr = b.curMultiple > 0 ? `${b.curMultiple.toFixed(2)}x` : "—x";
     const reasonTag = isOpenedChanged ? "开盘证据变更" : (isLadderChanged ? "价格跨越档位线" : "30s轮询心跳");
 
@@ -4754,7 +5035,9 @@ function openBuiltinBotModal(projectId) {
   document.getElementById("modalBotTitle").textContent = "配置内置阶梯止盈 · " + p.name;
   document.getElementById("editBotId").value = "builtin_" + p.id;
 
-  const basePrice = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
+  const isUsdt = (p.quote || "").toUpperCase() === "USDT";
+  const costPerShare = isUsdt ? (p.pricePerShareQuote || 1) : (p.pricePerShare || 0);
+  const basePrice = (costPerShare && p.tokensPerShare) ? (costPerShare / p.tokensPerShare) : 0;
   document.getElementById("mBotCostPrice").value = b.costPrice || basePrice;
   document.getElementById("mBotDrawdownEnable").checked = !!b.drawdownEnabled;
   document.getElementById("drawdownFieldsRow").style.display = b.drawdownEnabled ? "grid" : "none";
@@ -4874,14 +5157,16 @@ async function pollBotCycle(b) {
   if (!p) return;
 
   const meta = await fetchTokenMeta(p.token);
-  const pairAddr = await fetchPairAddress(p.token);
+  const pairAddr = await fetchPairAddress(p.token, p.quote);
   if (!pairAddr) return;
 
-  const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
-  if (wbnbReserve === 0n || tokenReserve === 0n) return;
+  const { quoteReserve, tokenReserve, quoteSymbol } = await fetchPairReserves(pairAddr, p.token);
+  if (quoteReserve === 0n || tokenReserve === 0n) return;
 
-  const curPrice = (Number(wbnbReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
-  const costPrice = b.costPrice || (p.pricePerShare / p.tokensPerShare);
+  const curPrice = (Number(quoteReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
+  const isUsdt = (quoteSymbol === "USDT" || (p.quote || "").toUpperCase() === "USDT");
+  const defaultCostPrice = isUsdt ? ((p.pricePerShareQuote || 1) / p.tokensPerShare) : (p.pricePerShare / p.tokensPerShare);
+  const costPrice = b.costPrice || defaultCostPrice;
   if (costPrice <= 0) return;
 
   const mult = curPrice / costPrice;
@@ -5055,6 +5340,8 @@ document.getElementById("btnSaveProject").addEventListener("click", () => {
     openedFn,
     note: existing ? (existing.note || "") : "",
     manualSold: existing ? (existing.manualSold || 0) : 0,
+    quote: existing ? (existing.quote || "WBNB") : "WBNB",
+    pricePerShareQuote: existing ? existing.pricePerShareQuote : undefined,
     source,
     state
   };
@@ -5301,7 +5588,11 @@ function openBotModal(botIdx = null) {
   } else {
     document.getElementById("modalBotTitle").textContent = "新建卖出机器人";
     document.getElementById("editBotId").value = "";
-    document.getElementById("mBotCostPrice").value = "";
+    const selP = projects.find(item => item.id === pSelect.value) || projects[activeProjectIdx];
+    const isUsdt = (selP?.quote || "").toUpperCase() === "USDT";
+    const costPerShare = isUsdt ? (selP?.pricePerShareQuote || 1) : (selP?.pricePerShare || 0);
+    const baseP = (costPerShare && selP?.tokensPerShare) ? (costPerShare / selP.tokensPerShare) : 0;
+    document.getElementById("mBotCostPrice").value = baseP || "";
     document.getElementById("mBotDrawdownEnable").checked = false;
     document.getElementById("drawdownFieldsRow").style.display = "none";
     document.getElementById("mBotDrawdownActive").value = 3.0;

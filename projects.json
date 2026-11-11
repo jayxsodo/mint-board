@@ -113,6 +113,8 @@
             "token": "0x2Ca00E5F1cb8d2203e0E7F29E3630fF8405b8c98",
             "sale": "0x24F5768B83eE2A40A5323a60664f86CED71931cE",
             "pricePerShare": 0.001453,
+            "quote": "USDT",
+            "pricePerShareQuote": 1,
             "tokensPerShare": 50000000,
             "totalShares": 10000,
             "taxPct": 2,
