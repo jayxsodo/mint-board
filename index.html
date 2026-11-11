@@ -1683,7 +1683,8 @@ function getFallbackCandidates() {
   });
 }
 
-// v10 FastLane: Single eth_call with sticky relay master (relay: 4000ms, public fallback: 2000ms)
+// v11 FastLane: Single eth_call with sticky relay master (relay: 4000ms, public fallback: 2000ms)
+// v11: Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
 async function fastEthCall(to, data, timeoutMs = 2000) {
   // 1. Sticky Primary: Always try relay first with 4000ms timeout
   const relayTimeout = Math.max(timeoutMs, 4000);
@@ -1707,13 +1708,23 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
     });
     clearTimeout(timer);
 
-    if (res && res.result !== undefined && res.result !== null && !res.error) {
+    if (res && typeof res === "object") {
       const latency = Math.round(performance.now() - start);
-      relayNode.latency = latency;
-      relayNode.consecutiveErrors = 0;
-      relayNode.lastSuccessTime = Date.now();
-      updateActiveRpcHost(relayNode.host);
-      return { result: res.result, latency, rpcHost: relayNode.host };
+      if (!res.error && res.result !== undefined && res.result !== null) {
+        relayNode.latency = latency;
+        relayNode.consecutiveErrors = 0;
+        relayNode.lastSuccessTime = Date.now();
+        updateActiveRpcHost(relayNode.host);
+        return { result: res.result, latency, rpcHost: relayNode.host, error: null };
+      }
+      if (res.error) {
+        // v11: Revert is a definitive answer, not node failure!
+        relayNode.latency = latency;
+        relayNode.consecutiveErrors = 0;
+        relayNode.lastSuccessTime = Date.now();
+        updateActiveRpcHost(relayNode.host);
+        return { result: null, error: res.error, latency, rpcHost: relayNode.host };
+      }
     }
     relayNode.consecutiveErrors++;
     relayNode.lastErrorTime = Date.now();
@@ -1748,13 +1759,23 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
       });
       clearTimeout(timer);
 
-      if (res && res.result !== undefined && res.result !== null && !res.error) {
+      if (res && typeof res === "object") {
         const latency = Math.round(performance.now() - fbStart);
-        node.latency = latency;
-        node.consecutiveErrors = 0;
-        node.lastSuccessTime = Date.now();
-        updateActiveRpcHost(node.host);
-        return { result: res.result, latency, rpcHost: node.host };
+        if (!res.error && res.result !== undefined && res.result !== null) {
+          node.latency = latency;
+          node.consecutiveErrors = 0;
+          node.lastSuccessTime = Date.now();
+          updateActiveRpcHost(node.host);
+          return { result: res.result, latency, rpcHost: node.host, error: null };
+        }
+        if (res.error) {
+          // v11: Revert is a definitive answer, not node failure!
+          node.latency = latency;
+          node.consecutiveErrors = 0;
+          node.lastSuccessTime = Date.now();
+          updateActiveRpcHost(node.host);
+          return { result: null, error: res.error, latency, rpcHost: node.host };
+        }
       }
       node.consecutiveErrors++;
       node.lastErrorTime = Date.now();
@@ -1765,10 +1786,11 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
       node.latency = Math.max(node.latency || 500, 2000) + 500;
     }
   }
-  return { result: null, latency: 999, rpcHost: null };
+  return { result: null, error: new Error("All RPC nodes failed"), latency: 999, rpcHost: null };
 }
 
-// v10 rpcRequest: Single RPC call with sticky relay master (relay: 6000ms, public fallback: 4000ms)
+// v11 rpcRequest: Single RPC call with sticky relay master (relay: 6000ms, public fallback: 4000ms)
+// v11: Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
 async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTimeoutMs = 4000) {
   // 1. Sticky Primary: Always try relay first with 6000ms timeout
   const start = performance.now();
@@ -1786,13 +1808,23 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
     });
     clearTimeout(timeout);
 
-    if (res && res.result !== undefined && res.result !== null && !res.error) {
+    if (res && typeof res === "object") {
       const latency = Math.round(performance.now() - start);
-      relayNode.latency = latency;
-      relayNode.consecutiveErrors = 0;
-      relayNode.lastSuccessTime = Date.now();
-      updateActiveRpcHost(relayNode.host);
-      return { result: res.result, latency, rpcHost: relayNode.host };
+      if (!res.error && res.result !== undefined && res.result !== null) {
+        relayNode.latency = latency;
+        relayNode.consecutiveErrors = 0;
+        relayNode.lastSuccessTime = Date.now();
+        updateActiveRpcHost(relayNode.host);
+        return { result: res.result, latency, rpcHost: relayNode.host, error: null };
+      }
+      if (res.error) {
+        // v11: Revert is an answer, not node failure!
+        relayNode.latency = latency;
+        relayNode.consecutiveErrors = 0;
+        relayNode.lastSuccessTime = Date.now();
+        updateActiveRpcHost(relayNode.host);
+        return { result: null, error: res.error, latency, rpcHost: relayNode.host };
+      }
     }
     relayNode.consecutiveErrors++;
     relayNode.lastErrorTime = Date.now();
@@ -1822,13 +1854,23 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
       });
       clearTimeout(timeout);
 
-      if (res && res.result !== undefined && res.result !== null && !res.error) {
+      if (res && typeof res === "object") {
         const latency = Math.round(performance.now() - fbStart);
-        node.latency = latency;
-        node.consecutiveErrors = 0;
-        node.lastSuccessTime = Date.now();
-        updateActiveRpcHost(node.host);
-        return { result: res.result, latency, rpcHost: node.host };
+        if (!res.error && res.result !== undefined && res.result !== null) {
+          node.latency = latency;
+          node.consecutiveErrors = 0;
+          node.lastSuccessTime = Date.now();
+          updateActiveRpcHost(node.host);
+          return { result: res.result, latency, rpcHost: node.host, error: null };
+        }
+        if (res.error) {
+          // v11: Revert is an answer, not node failure!
+          node.latency = latency;
+          node.consecutiveErrors = 0;
+          node.lastSuccessTime = Date.now();
+          updateActiveRpcHost(node.host);
+          return { result: null, error: res.error, latency, rpcHost: node.host };
+        }
       }
       node.consecutiveErrors++;
       node.lastErrorTime = Date.now();
@@ -1839,7 +1881,7 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
       node.latency = Math.max(node.latency || 500, 2000) + 500;
     }
   }
-  return { result: null, latency: 999, rpcHost: null };
+  return { result: null, error: new Error("All RPC nodes failed"), latency: 999, rpcHost: null };
 }
 
 // v10 rpcBatchRequest: Package multiple JSON-RPC calls into a single HTTP POST request.
@@ -1948,8 +1990,8 @@ async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs =
 }
 
 async function ethCall(to, data) {
-  const { result, latency, rpcHost } = await rpcRequest("eth_call", [{ to, data }, "latest"]);
-  return { result, latency, rpcHost };
+  const { result, error, latency, rpcHost } = await rpcRequest("eth_call", [{ to, data }, "latest"]);
+  return { result, error, latency, rpcHost };
 }
 
 async function ethGetBalance(addr) {
@@ -2304,8 +2346,20 @@ function applySyncedProjects(manifestProjects) {
       existing.launchTime = existing.startAt;
       existing.endAt = m.endAt || m.endTime || existing.endAt;
       existing.endTime = existing.endAt;
-      existing.progressFn = m.progressFn !== undefined ? m.progressFn : existing.progressFn;
-      existing.openedFn = m.openedFn !== undefined ? m.openedFn : existing.openedFn;
+      if (m.progressFn !== undefined) {
+        if (m.progressFn !== existing.progressFn) {
+          existing.progressFn = m.progressFn;
+          delete existing.state?.noProgressFn;
+          delete existing.state?.testedProgressCandidates;
+        }
+      }
+      if (m.openedFn !== undefined) {
+        if (m.openedFn !== existing.openedFn) {
+          existing.openedFn = m.openedFn;
+          delete existing.state?.noOpenedFn;
+          delete existing.state?.testedOpenedCandidates;
+        }
+      }
       existing.note = m.note !== undefined ? m.note : existing.note;
       existing.source = "sync";
 
@@ -2580,17 +2634,24 @@ async function updateBnbUsdPrice() {
 }
 
 // Read Presale Sold Shares
+// v11: Probe caching & negative cache. Each candidate tested at most once per session.
 async function readPresaleSoldShares(p) {
   const contractAddr = p.sale || p.presale;
   if (!contractAddr) {
     return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "无合约" };
   }
+  if (!p.state) p.state = {};
+
+  // v11: Negative cache - skip probing if project is verified to have no progress function
+  if (p.state.noProgressFn) {
+    return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" };
+  }
 
   if (p.progressFn && p.progressFn.trim()) {
     const fn = normalizeFn(p.progressFn);
     const selector = getSelector(fn);
-    const { result } = await ethCall(contractAddr, selector);
-    if (result && result !== "0x") {
+    const { result, error } = await ethCall(contractAddr, selector);
+    if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
         return { success: true, sold: Number(val), source: fn };
@@ -2598,52 +2659,102 @@ async function readPresaleSoldShares(p) {
     }
   }
 
-  // Probe candidates if progressFn didn't work
+  // v11: Probe candidates - each candidate tested at most once per page session
+  if (!p.state.testedProgressCandidates) {
+    p.state.testedProgressCandidates = {};
+  }
   const candidates = ["sold()", "sharesSold()", "totalMinted()", "totalSold()", "minted()"];
+  let hit = false;
   for (const cand of candidates) {
     if (p.progressFn && normalizeFn(p.progressFn) === cand) continue;
+    if (p.state.testedProgressCandidates[cand]) continue;
+    p.state.testedProgressCandidates[cand] = true;
+
     const sel = getSelector(cand);
-    const { result } = await ethCall(contractAddr, sel);
-    if (result && result !== "0x") {
+    const { result, error } = await ethCall(contractAddr, sel);
+    if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
+        // Hit! Remember candidate for subsequent rounds
+        p.progressFn = cand;
+        p.state.discoveredProgressFn = cand;
+        hit = true;
         return { success: true, sold: Number(val), source: cand };
       } catch (e) {}
     }
+  }
+
+  // Check if all candidates have now been tested without a hit
+  const allTested = candidates.every(cand =>
+    (p.progressFn && normalizeFn(p.progressFn) === cand) || p.state.testedProgressCandidates[cand]
+  );
+  if (allTested && !hit) {
+    p.state.noProgressFn = true;
   }
 
   return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" };
 }
 
 // Check Presale Opened Function
+// v11: Probe caching, negative cache & openedFn="none" sentinel.
 async function checkPresaleOpened(p) {
   const contractAddr = p.sale || p.presale;
   if (!contractAddr) return false;
+  if (!p.state) p.state = {};
+  if (p.state.openedLatched) return true;
 
-  if (p.openedFn && p.openedFn.trim()) {
-    const fn = normalizeFn(p.openedFn);
+  const rawOpenFn = p.openedFn && p.openedFn.trim();
+  // v11: Sentinel "none" means project definitely has no opened view function
+  if (rawOpenFn && rawOpenFn.toLowerCase() === "none") return false;
+  // v11: Negative cache - skip probing if project is verified to have no opened function
+  if (p.state.noOpenedFn) return false;
+
+  if (rawOpenFn) {
+    const fn = normalizeFn(rawOpenFn);
     const selector = getSelector(fn);
-    const { result } = await ethCall(contractAddr, selector);
-    if (result && result !== "0x") {
+    const { result, error } = await ethCall(contractAddr, selector);
+    if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
         if (val > 0n) return true;
+        // Function exists on contract and returned 0 (not opened yet)
+        return false;
       } catch (e) {}
     }
   }
 
-  // Probe candidates if openedFn didn't work or not configured
+  // v11: Probe candidates - each candidate tested at most once per page session
+  if (!p.state.testedOpenedCandidates) {
+    p.state.testedOpenedCandidates = {};
+  }
   const candidates = ["opened()", "launched()", "isOpen()", "isOpened()"];
+  let hit = false;
   for (const cand of candidates) {
-    if (p.openedFn && normalizeFn(p.openedFn) === cand) continue;
+    if (rawOpenFn && normalizeFn(rawOpenFn) === cand) continue;
+    if (p.state.testedOpenedCandidates[cand]) continue;
+    p.state.testedOpenedCandidates[cand] = true;
+
     const sel = getSelector(cand);
-    const { result } = await ethCall(contractAddr, sel);
-    if (result && result !== "0x") {
+    const { result, error } = await ethCall(contractAddr, sel);
+    if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
+        // Hit! Function exists on contract
+        p.openedFn = cand;
+        p.state.discoveredOpenedFn = cand;
+        hit = true;
         if (val > 0n) return true;
+        return false;
       } catch (e) {}
     }
+  }
+
+  // Check if all candidates have now been tested without a hit
+  const allTested = candidates.every(cand =>
+    (rawOpenFn && normalizeFn(rawOpenFn) === cand) || p.state.testedOpenedCandidates[cand]
+  );
+  if (allTested && !hit) {
+    p.state.noOpenedFn = true;
   }
 
   return false;
@@ -3383,10 +3494,13 @@ async function refreshActiveProject() {
       const walletToCheck = connectedWalletAddress || document.getElementById("watchWallet").value.trim();
       const hasWallet = (walletToCheck && walletToCheck.startsWith("0x") && walletToCheck.length === 42);
 
-      const progFn = p.progressFn && p.progressFn.trim() ? normalizeFn(p.progressFn) : "";
+      const rawProgFn = p.progressFn && p.progressFn.trim();
+      const progFn = (rawProgFn && !p.state?.noProgressFn) ? normalizeFn(rawProgFn) : "";
       const progSel = progFn ? getSelector(progFn) : "";
 
-      const openFn = p.openedFn && p.openedFn.trim() ? normalizeFn(p.openedFn) : "";
+      const rawOpenFn = p.openedFn && p.openedFn.trim();
+      const isNoneOpen = rawOpenFn && rawOpenFn.toLowerCase() === "none";
+      const openFn = (rawOpenFn && !isNoneOpen && !p.state?.noOpenedFn) ? normalizeFn(rawOpenFn) : "";
       const openSel = openFn ? getSelector(openFn) : "";
 
       // v10: Package all known cycle reads into Batch 1 (Target: 1 roundtrip for warm cycles)
@@ -3451,8 +3565,10 @@ async function refreshActiveProject() {
             const val = BigInt(b1.results.sold);
             soldInfo = { success: true, sold: Number(val), source: progFn };
           } catch (e) {}
-        } else if (contractAddr) {
+        } else if (contractAddr && !p.state?.noProgressFn) {
           soldInfo = await readPresaleSoldShares(p);
+        } else {
+          soldInfo = { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" };
         }
         if (soldInfo.success) {
           p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
@@ -3468,7 +3584,7 @@ async function refreshActiveProject() {
               liveEvidence.isOpenedFn = true;
             }
           } catch (e) {}
-        } else if (contractAddr && !openSel) {
+        } else if (contractAddr && !openSel && !isNoneOpen && !p.state?.noOpenedFn) {
           isOpenedFn = await checkPresaleOpened(p);
           if (isOpenedFn) liveEvidence.isOpenedFn = true;
         }
@@ -3553,8 +3669,8 @@ async function refreshActiveProject() {
         const pairAddr = await fetchPairAddress(p.token);
 
         const asyncTasks = [
-          readPresaleSoldShares(p),
-          checkPresaleOpened(p)
+          !p.state?.noProgressFn ? readPresaleSoldShares(p) : Promise.resolve({ success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" }),
+          (!isNoneOpen && !p.state?.noOpenedFn) ? checkPresaleOpened(p) : Promise.resolve(false)
         ];
         if (pairAddr) {
           asyncTasks.push(fetchPairReserves(pairAddr, p.token));
@@ -3717,15 +3833,26 @@ async function pollFastLane() {
     const fn = normalizeFn(p.progressFn || "sold()");
     const selector = getSelector(fn);
 
-    const needCheckOpened = !p.state?.openedLatched && !!(p.openedFn && p.openedFn.trim());
-    const tasks = [fastEthCall(contractAddr, selector)];
+    const rawOpenFn = p.openedFn && p.openedFn.trim();
+    const isNoneOpen = rawOpenFn && rawOpenFn.toLowerCase() === "none";
+    const hasValidOpenFn = rawOpenFn && !isNoneOpen && !p.state?.noOpenedFn;
+    const needCheckOpened = !p.state?.openedLatched && hasValidOpenFn;
+    const needCheckProg = !p.state?.noProgressFn || !!(p.progressFn && p.progressFn.trim());
+
+    const tasks = [];
+    if (needCheckProg) {
+      tasks.push(fastEthCall(contractAddr, selector));
+    }
     if (needCheckOpened) {
       tasks.push(fastEthCall(contractAddr, getSelector(normalizeFn(p.openedFn))));
     }
 
+    if (tasks.length === 0) return;
+
     const results = await Promise.all(tasks);
-    const progRes = results[0];
-    const openRes = needCheckOpened ? results[1] : null;
+    let taskIdx = 0;
+    const progRes = needCheckProg ? results[taskIdx++] : null;
+    const openRes = needCheckOpened ? results[taskIdx++] : null;
 
     // Discard if user switched project during in-flight call
     if (projects[activeProjectIdx]?.id !== p.id) return;
@@ -3855,7 +3982,7 @@ async function runProgressPatrolRound() {
 
       // Non-active project: single progressFn eth_call (错峰、带 in-flight 守卫、失败保留上次档位)
       const contractAddr = p.sale || p.presale;
-      if (contractAddr) {
+      if (contractAddr && (!p.state?.noProgressFn || (p.progressFn && p.progressFn.trim()))) {
         try {
           const fn = normalizeFn(p.progressFn || "sold()");
           const selector = getSelector(fn);
@@ -4282,17 +4409,24 @@ async function checkInstantSellEvidence(p) {
   const tokenAddr = (p.token || "").toLowerCase();
   const pairAddr = tokenCache[tokenAddr]?.pair;
 
+  const rawOpenFn = p.openedFn && p.openedFn.trim();
+  const isNoneOpen = rawOpenFn && rawOpenFn.toLowerCase() === "none";
+  const hasOpenFn = rawOpenFn && !isNoneOpen && !p.state?.noOpenedFn;
+
   // v10: Package opened check & pair reserves into single batch if pair is cached
   if (contractAddr && pairAddr) {
-    const openFn = p.openedFn && p.openedFn.trim() ? normalizeFn(p.openedFn) : "openedAt()";
-    const batchRes = await rpcBatchRequest([
-      { id: "open", method: "eth_call", params: [{ to: contractAddr, data: getSelector(openFn) }, "latest"] },
+    const batchCalls = [];
+    if (hasOpenFn) {
+      batchCalls.push({ id: "open", method: "eth_call", params: [{ to: contractAddr, data: getSelector(normalizeFn(rawOpenFn)) }, "latest"] });
+    }
+    batchCalls.push(
       { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
       { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
-    ]);
+    );
+    const batchRes = await rpcBatchRequest(batchCalls);
 
     if (batchRes.success) {
-      if (batchRes.results.open && batchRes.results.open !== "0x" && !batchRes.errors?.open) {
+      if (hasOpenFn && batchRes.results.open && batchRes.results.open !== "0x" && !batchRes.errors?.open) {
         try {
           if (BigInt(batchRes.results.open) > 0n) {
             p.state.openedLatched = true;
@@ -4326,10 +4460,12 @@ async function checkInstantSellEvidence(p) {
   }
 
   // 1. Check presale contract openedFn
-  const isOpenedFn = await checkPresaleOpened(p);
-  if (isOpenedFn) {
-    p.state.openedLatched = true;
-    return { triggered: true, reason: "发售合约开盘函数 (" + (p.openedFn || "opened/launched") + ") 返回 1" };
+  if (!isNoneOpen && !p.state?.noOpenedFn) {
+    const isOpenedFn = await checkPresaleOpened(p);
+    if (isOpenedFn) {
+      p.state.openedLatched = true;
+      return { triggered: true, reason: "发售合约开盘函数 (" + (p.openedFn || "opened/launched") + ") 返回 1" };
+    }
   }
 
   // 2. Check pair reserves on both sides > 0 and Router can quote
@@ -4889,6 +5025,15 @@ document.getElementById("btnSaveProject").addEventListener("click", () => {
   const source = existing ? (existing.source || "manual") : "manual";
   const state = existing?.state ? existing.state : { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
   const openedFn = document.getElementById("mProjOpenedFn") ? document.getElementById("mProjOpenedFn").value.trim() : "";
+  const progressFn = document.getElementById("mProjProgressFn").value.trim();
+  if (existing && existing.openedFn !== openedFn) {
+    delete state.noOpenedFn;
+    delete state.testedOpenedCandidates;
+  }
+  if (existing && existing.progressFn !== progressFn) {
+    delete state.noProgressFn;
+    delete state.testedProgressCandidates;
+  }
 
   const pObj = {
     id: editId || ("proj_" + Date.now()),
