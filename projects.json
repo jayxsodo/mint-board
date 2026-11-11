@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-11T21:22:07+08:00",
+    "updatedAt": "2026-11-12T01:32:48+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -105,6 +105,21 @@
             "endAt": "2026-11-18T18:01:00+08:00",
             "progressFn": "totalMinted",
             "openedFn": "launched",
+            "sync": true
+        },
+        {
+            "id": "fist",
+            "name": "FIST",
+            "token": "0x2Ca00E5F1cb8d2203e0E7F29E3630fF8405b8c98",
+            "sale": "0x24F5768B83eE2A40A5323a60664f86CED71931cE",
+            "pricePerShare": 0.001453,
+            "tokensPerShare": 50000000,
+            "totalShares": 10000,
+            "taxPct": 2,
+            "startAt": "2026-11-12T01:15:00+08:00",
+            "endAt": "",
+            "progressFn": "totalMinted",
+            "openedFn": "opened",
             "sync": true
         }
     ]
