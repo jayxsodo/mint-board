@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updatedAt": "2026-11-11T12:45:53+08:00",
+ "updatedAt": "2026-11-11T12:53:45+08:00",
  "projects": [
   {
    "id": "feg",
@@ -58,6 +58,51 @@
    "taxPct": 3.5,
    "startAt": "2026-11-10T22:30:00+08:00",
    "endAt": "2026-11-13T22:30:00+08:00",
+   "progressFn": "totalMinted",
+   "openedFn": "opened",
+   "sync": true
+  },
+  {
+   "id": "shine",
+   "name": "SHINE",
+   "token": "0xDDc2352d1ceC10b42e05A297232f5328902C6c2C",
+   "sale": "0xDDc2352d1ceC10b42e05A297232f5328902C6c2C",
+   "pricePerShare": 0.000401254,
+   "tokensPerShare": 9081.713688,
+   "totalShares": 15000,
+   "taxPct": 1,
+   "startAt": "2026-11-11T19:00:00+08:00",
+   "endAt": "2026-11-12T19:00:00+08:00",
+   "progressFn": "sharesSold",
+   "openedFn": "",
+   "sync": true
+  },
+  {
+   "id": "xiuxian",
+   "name": "修仙时代 XIUXIAN",
+   "token": "0xfc12863428311757dff7c6b1035aae86d97be337",
+   "sale": "0x965e6bAdAFff332c9721B714E674e5171c1D3B55",
+   "pricePerShare": 0.003,
+   "tokensPerShare": 30000000,
+   "totalShares": 11000,
+   "taxPct": 0,
+   "startAt": "2026-11-10T22:32:00+08:00",
+   "endAt": "2026-11-13T22:32:00+08:00",
+   "progressFn": "sharesSold",
+   "openedFn": "poolOpened",
+   "sync": true
+  },
+  {
+   "id": "hajimi2",
+   "name": "哈基米agent（新站）",
+   "token": "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
+   "sale": "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
+   "pricePerShare": 0.003,
+   "tokensPerShare": 79000000,
+   "totalShares": 11000,
+   "taxPct": 3.5,
+   "startAt": "2026-11-11T12:00:00+08:00",
+   "endAt": "2026-11-14T12:00:00+08:00",
    "progressFn": "totalMinted",
    "openedFn": "opened",
    "sync": true
