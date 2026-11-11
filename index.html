@@ -176,18 +176,12 @@
   .project-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
+    margin-bottom: 14px;
   }
   .tabs-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    max-width: calc(100% - 300px);
+    display: contents;
   }
   .project-tab {
     display: flex;
@@ -196,12 +190,16 @@
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    padding: 8px 14px;
+    padding: 7px 12px;
     border-radius: 10px;
     font-weight: 600;
     font-size: 13px;
-    white-space: nowrap;
     transition: all 0.15s;
+    flex: 1 1 215px;
+    max-width: 320px;
+    min-width: 150px;
+    box-sizing: border-box;
+    cursor: pointer;
   }
   .project-tab:hover {
     background: var(--card-hover);
@@ -214,6 +212,15 @@
     color: var(--blue);
     box-shadow: 0 0 12px rgba(56, 189, 248, 0.12);
   }
+  .project-tab .tab-name,
+  .project-tab > span:not(.kbd-key):not(.tab-badge) {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    min-width: 0;
+  }
   .kbd-key {
     background: #1a2233;
     border: 1px solid var(--border);
@@ -222,12 +229,15 @@
     padding: 1px 5px;
     border-radius: 4px;
     font-family: var(--font-mono);
+    flex-shrink: 0;
   }
   .tab-badge {
     font-size: 11px;
     padding: 2px 7px;
     border-radius: 999px;
     font-weight: 600;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .badge-unopened { background: rgba(127, 139, 164, 0.15); color: #94a3b8; border: 1px solid #475569; }
   .badge-selling { background: var(--amber-glow); color: #fbbf24; border: 1px solid var(--amber); }
@@ -240,6 +250,7 @@
     align-items: center;
     gap: 8px;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   /* Main Grid */
@@ -251,7 +262,6 @@
   }
   @media (max-width: 1080px) {
     .dashboard-grid { grid-template-columns: 1fr; }
-    .tabs-wrapper { max-width: 100%; }
   }
 
   .card {
@@ -2231,7 +2241,7 @@ function renderProjectTabs() {
 
     tab.innerHTML = `
       <span class="kbd-key">${idx + 1}</span>
-      <span>${escapeHtml(p.name)}${sourceTag}</span>
+      <span class="tab-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}${sourceTag}</span>
       <span class="tab-badge ${statusInfo.badgeClass}" id="tabBadge_${p.id}">${statusInfo.status}</span>
     `;
     container.appendChild(tab);
