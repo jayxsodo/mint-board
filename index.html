@@ -190,28 +190,63 @@
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    padding: 7px 12px;
+    padding: 6px 12px;
     border-radius: 10px;
     font-weight: 600;
     font-size: 13px;
     transition: all 0.15s;
-    flex: 1 1 215px;
-    max-width: 320px;
+    flex: 1 1 220px;
+    max-width: 330px;
     min-width: 150px;
+    min-height: 42px;
     box-sizing: border-box;
     cursor: pointer;
+    position: relative;
   }
   .project-tab:hover {
     background: var(--card-hover);
     color: var(--text);
     border-color: var(--border-bright);
   }
-  .project-tab.active {
-    background: #142033;
-    border: 1.5px solid var(--blue);
-    color: #ffffff;
-    box-shadow: 0 0 0 1.5px var(--blue), 0 0 14px rgba(56, 189, 248, 0.28);
+
+  /* v9: Decoupled Selection Indicator (Triple Layering: 3px pure white outline + outer glow + scale 1.02 + white pill) */
+  .project-tab.active,
+  .project-tab.tier-green.active,
+  .project-tab.tier-amber.active,
+  .project-tab.tier-red.active {
+    outline: 3px solid #ffffff !important;
+    outline-offset: -1px;
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.75), 0 0 6px rgba(255, 255, 255, 0.9) !important;
+    transform: scale(1.02);
+    z-index: 2;
+    position: relative;
+    color: #ffffff !important;
     font-weight: 700;
+  }
+  .project-tab.active:hover,
+  .project-tab.tier-green.active:hover,
+  .project-tab.tier-amber.active:hover,
+  .project-tab.tier-red.active:hover {
+    outline: 3px solid #ffffff !important;
+    outline-offset: -1px;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.85), 0 0 8px rgba(255, 255, 255, 1) !important;
+    transform: scale(1.02);
+  }
+
+  .tab-active-pill {
+    background: #ffffff;
+    color: #0b0f19;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 999px;
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.3;
   }
 
   /* v7: Project Grid Tier Colors (Green <20%, Amber 20-50%, Red >=50%, Unopened Gray) */
@@ -227,10 +262,6 @@
   }
   .project-tab.tier-green.active {
     background: rgba(16, 185, 129, 0.22);
-    border: 1.5px solid #34d399;
-    color: #ffffff;
-    box-shadow: 0 0 0 1.5px #10b981, 0 0 14px rgba(16, 185, 129, 0.40);
-    font-weight: 700;
   }
 
   .project-tab.tier-amber {
@@ -245,10 +276,6 @@
   }
   .project-tab.tier-amber.active {
     background: rgba(245, 158, 11, 0.22);
-    border: 1.5px solid #fbbf24;
-    color: #ffffff;
-    box-shadow: 0 0 0 1.5px #f59e0b, 0 0 14px rgba(245, 158, 11, 0.40);
-    font-weight: 700;
   }
 
   .project-tab.tier-red {
@@ -263,20 +290,42 @@
   }
   .project-tab.tier-red.active {
     background: rgba(244, 63, 94, 0.22);
-    border: 1.5px solid #fb7185;
-    color: #ffffff;
-    box-shadow: 0 0 0 1.5px #f43f5e, 0 0 14px rgba(244, 63, 94, 0.40);
-    font-weight: 700;
   }
 
+  .tab-main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    line-height: 1.2;
+  }
+  .tab-name-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+    gap: 2px;
+  }
   .project-tab .tab-name,
-  .project-tab > span:not(.kbd-key):not(.tab-badge) {
+  .project-tab > span:not(.kbd-key):not(.tab-badge):not(.tab-active-pill) {
     flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
     min-width: 0;
+  }
+  .tab-launch-time {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
+    line-height: 1.15;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .kbd-key {
     background: #1a2233;
@@ -1477,6 +1526,52 @@ function parseTimestamp(dateStr) {
   return isNaN(t) ? 0 : t;
 }
 
+// v9: Format launch time in Asia/Shanghai timezone (今天 HH:mm 开售 / 明天 HH:mm 开售 / MM-DD HH:mm 开售)
+function formatLaunchTime(dateStr) {
+  const ts = parseTimestamp(dateStr);
+  if (!ts) return "";
+
+  const timeZone = "Asia/Shanghai";
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+
+  const parts = fmt.formatToParts(new Date(ts));
+  const get = (type) => parts.find(p => p.type === type)?.value || "";
+  const year = parseInt(get("year"), 10);
+  const month = get("month");
+  const day = get("day");
+  const hour = get("hour");
+  const minute = get("minute");
+  const timeStr = `${hour}:${minute}`;
+
+  const nowParts = fmt.formatToParts(new Date());
+  const nowGet = (type) => nowParts.find(p => p.type === type)?.value || "";
+  const nowYear = parseInt(nowGet("year"), 10);
+  const nowMonth = nowGet("month");
+  const nowDay = nowGet("day");
+
+  const nowDateOnly = Date.UTC(nowYear, parseInt(nowMonth, 10) - 1, parseInt(nowDay, 10));
+  const targetDateOnly = Date.UTC(year, parseInt(month, 10) - 1, parseInt(day, 10));
+  const diffDays = Math.round((targetDateOnly - nowDateOnly) / (86400 * 1000));
+
+  if (diffDays < 0) {
+    return "";
+  } else if (diffDays === 0) {
+    return `今天 ${timeStr} 开售`;
+  } else if (diffDays === 1) {
+    return `明天 ${timeStr} 开售`;
+  } else {
+    return `${month}-${day} ${timeStr} 开售`;
+  }
+}
+
 function padAddress(addr) {
   return (addr || "").toLowerCase().replace(/^0x/, "").padStart(64, "0");
 }
@@ -2057,6 +2152,9 @@ function applySyncedProjects(manifestProjects) {
     activeProjectIdx = Math.max(0, projects.length - 1);
   }
 
+  // v9: Ensure urgency sorting is applied on initial sync / manifest sync
+  checkAndSortProjectsByUrgency();
+
   saveProjects();
   renderProjectTabs();
 }
@@ -2359,6 +2457,10 @@ function determineProjectStatus(p, timeStatus, liveEvidence = {}) {
 
   // 4. In Sale Schedule (v7: pill color follows tier: green <20%, amber 20-50%, red >=50%)
   if (timeStatus === "已开始") {
+    const endTs = parseTimestamp(p.endAt || p.endTime);
+    if (endTs && Date.now() >= endTs) {
+      return { status: "已截止", badgeClass: "badge-unopened" };
+    }
     const pct = totalCount > 0 ? (currentSold / totalCount) * 100 : 0;
     let badgeTierMod = "badge-selling-green";
     if (pct >= 50) {
@@ -2414,6 +2516,17 @@ function getProjectTierInfo(p, overrideSold = null) {
 
   // Already started / opened / sold out: calculate tier based on sold / totalShares * 100
   const pct = totalCount > 0 ? (effectiveSold / totalCount) * 100 : 0;
+
+  if (statusText === "已截止") {
+    return {
+      tier: "ended",
+      tabTierClass: "",
+      badgeClass: "badge-unopened",
+      statusText,
+      pct
+    };
+  }
+
   let tier = "green";
   let tabTierClass = "tier-green";
 
@@ -2435,6 +2548,82 @@ function getProjectTierInfo(p, overrideSold = null) {
     statusText,
     pct
   };
+}
+
+// v9: Urgency rank calculation
+// 1. 已开盘（opened）或进度 ≥50%（红档）最前
+// 2. 20% ≤ 进度 < 50%（橙档）次之
+// 3. 发售中且进度 <20%（绿档）再次
+// 4. 已结束/已截止（ended）再次
+// 5. 未开售（not started，灰档）永远最后
+function getProjectUrgencyRank(p, tierInfo = null) {
+  if (!tierInfo) tierInfo = getProjectTierInfo(p);
+  const now = Date.now();
+  const launchTs = parseTimestamp(p.startAt || p.launchTime);
+  const endTs = parseTimestamp(p.endAt || p.endTime);
+  const isStarted = !!(launchTs && now >= launchTs);
+  const isEnded = !!(endTs && now >= endTs);
+  const isOpened = (tierInfo.statusText === "已开盘" || (p.state && p.state.openedLatched));
+  const pct = tierInfo.pct || 0;
+
+  // 1. 已开盘（opened）或进度 ≥50%（红档）最前
+  if (isOpened || pct >= 50) return 1;
+  // 2. 20% ≤ 进度 < 50%（橙档）次之
+  if (pct >= 20) return 2;
+  // 5. 未开售（not started，灰档）永远最后
+  if (!isStarted || tierInfo.statusText === "未开盘" || tierInfo.tier === "unopened") return 5;
+  // 4. 已结束/已截止（ended）再次
+  if (isEnded || tierInfo.statusText === "已截止" || tierInfo.statusText === "已结束" || tierInfo.tier === "ended") return 4;
+  // 3. 发售中且进度 <20%（绿档）再次
+  return 3;
+}
+
+// v9: Multi-key stable sort by urgency
+function sortProjectsByUrgency(projList) {
+  const meta = new Map();
+  for (const p of projList) {
+    const tierInfo = getProjectTierInfo(p);
+    const rank = getProjectUrgencyRank(p, tierInfo);
+    meta.set(p.id, { rank, pct: tierInfo.pct || 0 });
+  }
+  return [...projList].sort((a, b) => {
+    const mA = meta.get(a.id);
+    const mB = meta.get(b.id);
+    if (mA.rank !== mB.rank) return mA.rank - mB.rank;
+    const pctDiff = mB.pct - mA.pct;
+    if (Math.abs(pctDiff) > 1e-6) return pctDiff;
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+}
+
+// v9: Trigger re-sorting only when order changed
+function checkAndSortProjectsByUrgency() {
+  if (!projects || projects.length <= 1) return;
+  const sorted = sortProjectsByUrgency(projects);
+
+  let changed = false;
+  for (let i = 0; i < projects.length; i++) {
+    if (projects[i].id !== sorted[i].id) {
+      changed = true;
+      break;
+    }
+  }
+
+  if (!changed) return;
+
+  const currentSelectedId = projects[activeProjectIdx]?.id;
+  projects = sorted;
+  saveProjects();
+
+  if (currentSelectedId) {
+    const newIdx = projects.findIndex(p => p.id === currentSelectedId);
+    if (newIdx !== -1) {
+      activeProjectIdx = newIdx;
+    }
+  }
+
+  renderProjectTabs();
+  addLog("SYS", "项目瓷砖已按紧急度自动重排完成");
 }
 
 function applyProjectTabTier(p, idx = -1) {
@@ -2459,6 +2648,34 @@ function applyProjectTabTier(p, idx = -1) {
     }
     if (tabBadge.textContent !== tierInfo.statusText) {
       tabBadge.textContent = tierInfo.statusText;
+    }
+  }
+
+  // v9: Active pill synchronization
+  const kbdKey = tab.querySelector(".kbd-key");
+  const existingPill = tab.querySelector(".tab-active-pill");
+  if (isActive && !existingPill && kbdKey) {
+    const pill = document.createElement("span");
+    pill.className = "tab-active-pill";
+    pill.textContent = "▶ 当前";
+    kbdKey.insertAdjacentElement("afterend", pill);
+  } else if (!isActive && existingPill) {
+    existingPill.remove();
+  }
+
+  // v9: Launch time for unopened project
+  const launchTimeEl = document.getElementById(`tabLaunchTime_${p.id}`);
+  const isUnopened = (tierInfo.tier === "unopened" || tierInfo.statusText === "未开盘");
+  if (isUnopened) {
+    const launchStr = formatLaunchTime(p.startAt || p.launchTime);
+    if (launchTimeEl) {
+      launchTimeEl.textContent = launchStr;
+      launchTimeEl.style.display = launchStr ? "block" : "none";
+    }
+  } else {
+    if (launchTimeEl) {
+      launchTimeEl.textContent = "";
+      launchTimeEl.style.display = "none";
     }
   }
 }
@@ -2493,9 +2710,21 @@ function renderProjectTabs() {
 
     const sourceTag = p.source === "manual" ? `<span style="font-size:9.5px; opacity:0.6; margin-left:2px" title="本地手动添加">自</span>` : "";
 
+    const activePill = isActive ? `<span class="tab-active-pill">▶ 当前</span>` : "";
+    const isUnopened = (tierInfo.tier === "unopened" || tierInfo.statusText === "未开盘");
+    const launchTimeStr = isUnopened ? formatLaunchTime(p.startAt || p.launchTime) : "";
+    const launchTimeHtml = launchTimeStr ? `<div class="tab-launch-time" id="tabLaunchTime_${p.id}">${escapeHtml(launchTimeStr)}</div>` : "";
+
     tab.innerHTML = `
       <span class="kbd-key">${idx + 1}</span>
-      <span class="tab-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}${sourceTag}</span>
+      ${activePill}
+      <div class="tab-main">
+        <div class="tab-name-row">
+          <span class="tab-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+          ${sourceTag}
+        </div>
+        ${launchTimeHtml}
+      </div>
       <span class="tab-badge ${tierInfo.badgeClass}" id="tabBadge_${p.id}">${tierInfo.statusText}</span>
     `;
     container.appendChild(tab);
@@ -3213,6 +3442,11 @@ async function runProgressPatrolRound() {
       if (i < projects.length - 1) {
         await new Promise(r => setTimeout(r, 120));
       }
+    }
+
+    // v9: Re-sort projects by urgency after full scan round completes
+    if (!document.hidden) {
+      checkAndSortProjectsByUrgency();
     }
   } finally {
     isPatrolInFlight = false;
