@@ -1619,10 +1619,12 @@ const USDT = "0x55d398326f99059fF775485246999027B3197955";
 
 // Primary RPC: Frankfurt VPS self-hosted BSC relay
 const RELAY_RPC = "https://45-76-80-16.sslip.io:8443/rpc/251a4c153b54acbcc576ecb1a76f2f73";
+const RELAY_HOST = "自建中继·法兰克福";
+const PANCAKE_PAIR_WBNB_USDT = "0x16b9a82891338f9ba80e2d6970fdda79d1eb0dae";
 
 // Endpoint configurations (Relay is #1 priority, public nodes are failover fallbacks)
 const RPC_CONFIGS = [
-  { url: RELAY_RPC, host: "自建中继·法兰克福", isRelay: true, baseLatency: 150 },
+  { url: RELAY_RPC, host: RELAY_HOST, isRelay: true, baseLatency: 150 },
   { url: "https://bsc-dataseed.bnbchain.org", host: "bsc-dataseed.bnbchain.org", isRelay: false, baseLatency: 300 },
   { url: "https://bsc-dataseed1.defibit.io", host: "bsc-dataseed1.defibit.io", isRelay: false, baseLatency: 300 },
   { url: "https://bsc-dataseed1.ninicoin.io", host: "bsc-dataseed1.ninicoin.io", isRelay: false, baseLatency: 300 },
@@ -1632,7 +1634,7 @@ const RPC_CONFIGS = [
 
 const RPCS = RPC_CONFIGS.map(c => c.url);
 let currentRpcIdx = 0;
-let lastSuccessfulRpcHost = RPC_CONFIGS[0].host;
+let lastSuccessfulRpcHost = RELAY_HOST;
 
 // Track health and latency across endpoints for dynamic routing & failover
 const rpcNodes = RPC_CONFIGS.map(cfg => ({
@@ -1646,19 +1648,32 @@ const rpcNodes = RPC_CONFIGS.map(cfg => ({
   lastSuccessTime: 0
 }));
 
+const relayNode = rpcNodes.find(n => n.isRelay) || rpcNodes[0];
+
+function sanitizeRpcHost(host) {
+  if (!host) return RELAY_HOST;
+  if (typeof host === "string" && (host.includes("sslip.io") || host.includes("/rpc/"))) {
+    return RELAY_HOST;
+  }
+  return host;
+}
+
 function updateActiveRpcHost(host) {
   if (!host) return;
-  lastSuccessfulRpcHost = host;
+  lastSuccessfulRpcHost = sanitizeRpcHost(host);
   const nodeEl = document.getElementById("rpcNode");
   if (nodeEl) {
-    nodeEl.textContent = host;
-    nodeEl.style.color = (host === "自建中继·法兰克福") ? "var(--blue)" : "var(--text-dim)";
+    nodeEl.textContent = lastSuccessfulRpcHost;
+    nodeEl.style.color = (lastSuccessfulRpcHost === RELAY_HOST) ? "var(--blue)" : "var(--text-dim)";
   }
 }
 
-function getFastLaneCandidates() {
+// v10: Fallback candidates are strictly public nodes sorted by latency and cooldown.
+// Relay NEVER participates in fallback ranking or 30s cooldown: it is always attempted first.
+function getFallbackCandidates() {
   const now = Date.now();
-  return [...rpcNodes].sort((a, b) => {
+  const publicNodes = rpcNodes.filter(n => !n.isRelay);
+  return [...publicNodes].sort((a, b) => {
     const aCooldown = (a.consecutiveErrors >= 2 && (now - a.lastErrorTime < 30000));
     const bCooldown = (b.consecutiveErrors >= 2 && (now - b.lastErrorTime < 30000));
     if (aCooldown !== bCooldown) return aCooldown ? 1 : -1;
@@ -1668,11 +1683,52 @@ function getFastLaneCandidates() {
   });
 }
 
+// v10 FastLane: Single eth_call with sticky relay master (relay: 4000ms, public fallback: 2000ms)
 async function fastEthCall(to, data, timeoutMs = 2000) {
-  const candidates = getFastLaneCandidates();
-  for (let i = 0; i < Math.min(3, candidates.length); i++) {
-    const node = candidates[i];
-    const start = performance.now();
+  // 1. Sticky Primary: Always try relay first with 4000ms timeout
+  const relayTimeout = Math.max(timeoutMs, 4000);
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), relayTimeout);
+    const res = await fetch(relayNode.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method: "eth_call",
+        params: [{ to, data }, "latest"]
+      }),
+      signal: controller.signal
+    }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    clearTimeout(timer);
+
+    if (res && res.result !== undefined && res.result !== null && !res.error) {
+      const latency = Math.round(performance.now() - start);
+      relayNode.latency = latency;
+      relayNode.consecutiveErrors = 0;
+      relayNode.lastSuccessTime = Date.now();
+      updateActiveRpcHost(relayNode.host);
+      return { result: res.result, latency, rpcHost: relayNode.host };
+    }
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  } catch (err) {
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  }
+
+  // 2. Fallback: Public nodes in latency order (relay failed)
+  const fallbacks = getFallbackCandidates();
+  for (let i = 0; i < Math.min(3, fallbacks.length); i++) {
+    const node = fallbacks[i];
+    const fbStart = performance.now();
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1692,8 +1748,8 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
       });
       clearTimeout(timer);
 
-      if (res && res.result !== undefined && res.result !== null) {
-        const latency = Math.round(performance.now() - start);
+      if (res && res.result !== undefined && res.result !== null && !res.error) {
+        const latency = Math.round(performance.now() - fbStart);
         node.latency = latency;
         node.consecutiveErrors = 0;
         node.lastSuccessTime = Date.now();
@@ -1712,14 +1768,49 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
   return { result: null, latency: 999, rpcHost: null };
 }
 
-async function rpcRequest(method, params = []) {
-  const candidates = getFastLaneCandidates();
-  for (let i = 0; i < candidates.length; i++) {
-    const node = candidates[i];
-    const start = performance.now();
+// v10 rpcRequest: Single RPC call with sticky relay master (relay: 6000ms, public fallback: 4000ms)
+async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTimeoutMs = 4000) {
+  // 1. Sticky Primary: Always try relay first with 6000ms timeout
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), relayTimeoutMs);
+    const res = await fetch(relayNode.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+      signal: controller.signal
+    }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    clearTimeout(timeout);
+
+    if (res && res.result !== undefined && res.result !== null && !res.error) {
+      const latency = Math.round(performance.now() - start);
+      relayNode.latency = latency;
+      relayNode.consecutiveErrors = 0;
+      relayNode.lastSuccessTime = Date.now();
+      updateActiveRpcHost(relayNode.host);
+      return { result: res.result, latency, rpcHost: relayNode.host };
+    }
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  } catch (e) {
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  }
+
+  // 2. Fallback: Public nodes in latency order (relay failed)
+  const fallbacks = getFallbackCandidates();
+  for (let i = 0; i < fallbacks.length; i++) {
+    const node = fallbacks[i];
+    const fbStart = performance.now();
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), fallbackTimeoutMs);
       const res = await fetch(node.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1731,8 +1822,8 @@ async function rpcRequest(method, params = []) {
       });
       clearTimeout(timeout);
 
-      if (res && res.result !== undefined && res.result !== null) {
-        const latency = Math.round(performance.now() - start);
+      if (res && res.result !== undefined && res.result !== null && !res.error) {
+        const latency = Math.round(performance.now() - fbStart);
         node.latency = latency;
         node.consecutiveErrors = 0;
         node.lastSuccessTime = Date.now();
@@ -1749,6 +1840,111 @@ async function rpcRequest(method, params = []) {
     }
   }
   return { result: null, latency: 999, rpcHost: null };
+}
+
+// v10 rpcBatchRequest: Package multiple JSON-RPC calls into a single HTTP POST request.
+// Always tries relay first. Matches responses by id. Returns { success, results, errors, latency, rpcHost }.
+async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs = 4000) {
+  if (!calls || calls.length === 0) {
+    return { success: false, results: {}, errors: {}, latency: 0, rpcHost: null };
+  }
+
+  const payload = calls.map((c, idx) => ({
+    jsonrpc: "2.0",
+    id: c.id !== undefined ? c.id : idx,
+    method: c.method,
+    params: c.params || []
+  }));
+
+  // 1. Sticky Primary: Always try relay first with 6000ms timeout
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), relayTimeoutMs);
+    const res = await fetch(relayNode.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+    clearTimeout(timer);
+
+    if (Array.isArray(res) && res.length > 0) {
+      const latency = Math.round(performance.now() - start);
+      relayNode.latency = latency;
+      relayNode.consecutiveErrors = 0;
+      relayNode.lastSuccessTime = Date.now();
+      updateActiveRpcHost(relayNode.host);
+
+      const results = {};
+      const errors = {};
+      for (const item of res) {
+        if (item && item.id !== undefined) {
+          results[item.id] = item.result;
+          if (item.error) errors[item.id] = item.error;
+        }
+      }
+      return { success: true, results, errors, latency, rpcHost: relayNode.host };
+    }
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  } catch (err) {
+    relayNode.consecutiveErrors++;
+    relayNode.lastErrorTime = Date.now();
+    relayNode.latency = Math.max(relayNode.latency || 500, 2000) + 500;
+  }
+
+  // 2. Fallback: Try public nodes in latency order for batch support
+  const fallbacks = getFallbackCandidates();
+  for (let i = 0; i < fallbacks.length; i++) {
+    const node = fallbacks[i];
+    const fbStart = performance.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), fallbackTimeoutMs);
+      const res = await fetch(node.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      }).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
+      clearTimeout(timer);
+
+      if (Array.isArray(res) && res.length > 0) {
+        const latency = Math.round(performance.now() - fbStart);
+        node.latency = latency;
+        node.consecutiveErrors = 0;
+        node.lastSuccessTime = Date.now();
+        updateActiveRpcHost(node.host);
+
+        const results = {};
+        const errors = {};
+        for (const item of res) {
+          if (item && item.id !== undefined) {
+            results[item.id] = item.result;
+            if (item.error) errors[item.id] = item.error;
+          }
+        }
+        return { success: true, results, errors, latency, rpcHost: node.host };
+      }
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
+    } catch (e) {
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
+    }
+  }
+
+  return { success: false, results: {}, errors: {}, latency: 999, rpcHost: null };
 }
 
 async function ethCall(to, data) {
@@ -2267,13 +2463,26 @@ async function fetchTokenMeta(tokenAddr) {
   if (tokenCache[tokenAddr] && tokenCache[tokenAddr].decimals !== undefined) {
     return tokenCache[tokenAddr];
   }
-  const [symRes, decRes] = await Promise.all([
-    ethCall(tokenAddr, "0x95d89b41"),
-    ethCall(tokenAddr, "0x313ce567")
+  const batchRes = await rpcBatchRequest([
+    { id: "sym", method: "eth_call", params: [{ to: tokenAddr, data: "0x95d89b41" }, "latest"] },
+    { id: "dec", method: "eth_call", params: [{ to: tokenAddr, data: "0x313ce567" }, "latest"] }
   ]);
+  let symResult = null;
+  let decResult = null;
+  if (batchRes.success) {
+    symResult = batchRes.results.sym;
+    decResult = batchRes.results.dec;
+  } else {
+    const [symRes, decRes] = await Promise.all([
+      ethCall(tokenAddr, "0x95d89b41"),
+      ethCall(tokenAddr, "0x313ce567")
+    ]);
+    symResult = symRes?.result;
+    decResult = decRes?.result;
+  }
 
-  const symbol = decodeString(symRes.result) || "TOKEN";
-  const decimals = decRes.result ? parseInt(decRes.result, 16) : 18;
+  const symbol = decodeString(symResult) || "TOKEN";
+  const decimals = decResult ? parseInt(decResult, 16) : 18;
   if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
   tokenCache[tokenAddr].symbol = symbol;
   tokenCache[tokenAddr].decimals = decimals;
@@ -2300,16 +2509,30 @@ async function fetchPairAddress(tokenAddr) {
 
 async function fetchPairReserves(pairAddr, tokenAddr) {
   if (!pairAddr) return { wbnbReserve: 0n, tokenReserve: 0n };
-  const [resRes, t0Res] = await Promise.all([
-    ethCall(pairAddr, "0x0902f1ac"),
-    ethCall(pairAddr, "0x0dfe1681")
+  const batchRes = await rpcBatchRequest([
+    { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
+    { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
   ]);
-  if (!resRes.result || resRes.result.length < 130) {
+  let resHex = null;
+  let t0Hex = null;
+  if (batchRes.success) {
+    resHex = batchRes.results.res;
+    t0Hex = batchRes.results.t0;
+  } else {
+    const [resRes, t0Res] = await Promise.all([
+      ethCall(pairAddr, "0x0902f1ac"),
+      ethCall(pairAddr, "0x0dfe1681")
+    ]);
+    resHex = resRes?.result;
+    t0Hex = t0Res?.result;
+  }
+
+  if (!resHex || resHex.length < 130) {
     return { wbnbReserve: 0n, tokenReserve: 0n };
   }
-  const r0 = BigInt("0x" + resRes.result.slice(2, 66));
-  const r1 = BigInt("0x" + resRes.result.slice(66, 130));
-  const t0 = t0Res.result ? "0x" + t0Res.result.slice(-40).toLowerCase() : "";
+  const r0 = BigInt("0x" + resHex.slice(2, 66));
+  const r1 = BigInt("0x" + resHex.slice(66, 130));
+  const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
   const isT0Wbnb = (t0 === WBNB.toLowerCase());
 
   const wbnbReserve = isT0Wbnb ? r0 : r1;
@@ -2319,25 +2542,38 @@ async function fetchPairReserves(pairAddr, tokenAddr) {
 
 async function updateBnbUsdPrice() {
   try {
-    const data = "0xe6a43905" + padAddress(WBNB) + padAddress(USDT);
-    const { result } = await ethCall(FACTORY, data);
-    if (result && result.length >= 66) {
-      const pair = "0x" + result.slice(-40);
-      const [resRes, t0Res] = await Promise.all([
-        ethCall(pair, "0x0902f1ac"),
-        ethCall(pair, "0x0dfe1681")
-      ]);
-      if (resRes.result && resRes.result.length >= 130) {
-        const r0 = BigInt("0x" + resRes.result.slice(2, 66));
-        const r1 = BigInt("0x" + resRes.result.slice(66, 130));
-        const t0 = t0Res.result ? "0x" + t0Res.result.slice(-40).toLowerCase() : "";
-        const isT0Wbnb = (t0 === WBNB.toLowerCase());
-        const wbnbR = isT0Wbnb ? r0 : r1;
-        const usdtR = isT0Wbnb ? r1 : r0;
-        if (wbnbR > 0n) {
-          bnbUsdPrice = (Number(usdtR) / 1e18) / (Number(wbnbR) / 1e18);
-          document.getElementById("bnbPriceUsd").textContent = `$${bnbUsdPrice.toFixed(2)}`;
-        }
+    const batchRes = await rpcBatchRequest([
+      { id: "res", method: "eth_call", params: [{ to: PANCAKE_PAIR_WBNB_USDT, data: "0x0902f1ac" }, "latest"] },
+      { id: "t0", method: "eth_call", params: [{ to: PANCAKE_PAIR_WBNB_USDT, data: "0x0dfe1681" }, "latest"] }
+    ]);
+    let resHex = null;
+    let t0Hex = null;
+    if (batchRes.success) {
+      resHex = batchRes.results.res;
+      t0Hex = batchRes.results.t0;
+    } else {
+      const data = "0xe6a43905" + padAddress(WBNB) + padAddress(USDT);
+      const { result } = await ethCall(FACTORY, data);
+      if (result && result.length >= 66) {
+        const pair = "0x" + result.slice(-40);
+        const [resRes, t0Res] = await Promise.all([
+          ethCall(pair, "0x0902f1ac"),
+          ethCall(pair, "0x0dfe1681")
+        ]);
+        resHex = resRes?.result;
+        t0Hex = t0Res?.result;
+      }
+    }
+    if (resHex && resHex.length >= 130) {
+      const r0 = BigInt("0x" + resHex.slice(2, 66));
+      const r1 = BigInt("0x" + resHex.slice(66, 130));
+      const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
+      const isT0Wbnb = (t0 === WBNB.toLowerCase());
+      const wbnbR = isT0Wbnb ? r0 : r1;
+      const usdtR = isT0Wbnb ? r1 : r0;
+      if (wbnbR > 0n) {
+        bnbUsdPrice = (Number(usdtR) / 1e18) / (Number(wbnbR) / 1e18);
+        document.getElementById("bnbPriceUsd").textContent = `$${bnbUsdPrice.toFixed(2)}`;
       }
     }
   } catch (e) {}
@@ -2962,28 +3198,75 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
 // 7. CORE TICK & DATA REFRESHING
 // ==========================================
 async function refreshTopBar() {
-  // 1. Block Height & Latency
-  const { block, latency, rpcHost } = await ethBlockNumber();
-  updateActiveRpcHost(rpcHost || lastSuccessfulRpcHost);
-  if (block) {
-    document.getElementById("blockHeight").textContent = `#${block.toLocaleString()}`;
-    document.getElementById("rpcLatency").textContent = `${latency} ms`;
-    document.getElementById("liveDot").style.background = latency < 350 ? "var(--green)" : "var(--amber)";
-  } else {
-    document.getElementById("rpcLatency").textContent = "ERR";
-    document.getElementById("liveDot").style.background = "var(--red)";
-  }
-
-  // 2. Watch Wallet BNB Balance
   const wAddr = document.getElementById("watchWallet").value.trim();
-  if (wAddr && wAddr.startsWith("0x") && wAddr.length === 42) {
-    const balWei = await ethGetBalance(wAddr);
-    const bnbBal = Number(balWei) / 1e18;
-    document.getElementById("walletBnbBal").textContent = `${bnbBal.toFixed(4)} BNB`;
+  const hasWatchWallet = (wAddr && wAddr.startsWith("0x") && wAddr.length === 42);
+
+  const topCalls = [
+    { id: "block", method: "eth_blockNumber", params: [] },
+    { id: "usdt_res", method: "eth_call", params: [{ to: PANCAKE_PAIR_WBNB_USDT, data: "0x0902f1ac" }, "latest"] },
+    { id: "usdt_t0", method: "eth_call", params: [{ to: PANCAKE_PAIR_WBNB_USDT, data: "0x0dfe1681" }, "latest"] }
+  ];
+  if (hasWatchWallet) {
+    topCalls.push({ id: "bnb_bal", method: "eth_getBalance", params: [wAddr, "latest"] });
   }
 
-  // 3. BNB USD Price
-  await updateBnbUsdPrice();
+  const batchRes = await rpcBatchRequest(topCalls);
+  if (batchRes.success) {
+    const blockHex = batchRes.results.block;
+    const block = blockHex ? parseInt(blockHex, 16) : null;
+    const latency = batchRes.latency;
+    updateActiveRpcHost(batchRes.rpcHost || lastSuccessfulRpcHost);
+
+    if (block) {
+      document.getElementById("blockHeight").textContent = `#${block.toLocaleString()}`;
+      document.getElementById("rpcLatency").textContent = `${latency} ms`;
+      document.getElementById("liveDot").style.background = latency < 350 ? "var(--green)" : "var(--amber)";
+    } else {
+      document.getElementById("rpcLatency").textContent = "ERR";
+      document.getElementById("liveDot").style.background = "var(--red)";
+    }
+
+    if (hasWatchWallet && batchRes.results.bnb_bal) {
+      const balWei = BigInt(batchRes.results.bnb_bal);
+      const bnbBal = Number(balWei) / 1e18;
+      document.getElementById("walletBnbBal").textContent = `${bnbBal.toFixed(4)} BNB`;
+    }
+
+    const resHex = batchRes.results.usdt_res;
+    const t0Hex = batchRes.results.usdt_t0;
+    if (resHex && resHex.length >= 130) {
+      const r0 = BigInt("0x" + resHex.slice(2, 66));
+      const r1 = BigInt("0x" + resHex.slice(66, 130));
+      const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
+      const isT0Wbnb = (t0 === WBNB.toLowerCase());
+      const wbnbR = isT0Wbnb ? r0 : r1;
+      const usdtR = isT0Wbnb ? r1 : r0;
+      if (wbnbR > 0n) {
+        bnbUsdPrice = (Number(usdtR) / 1e18) / (Number(wbnbR) / 1e18);
+        document.getElementById("bnbPriceUsd").textContent = `$${bnbUsdPrice.toFixed(2)}`;
+      }
+    }
+  } else {
+    // Fallback: Individual calls
+    const { block, latency, rpcHost } = await ethBlockNumber();
+    updateActiveRpcHost(rpcHost || lastSuccessfulRpcHost);
+    if (block) {
+      document.getElementById("blockHeight").textContent = `#${block.toLocaleString()}`;
+      document.getElementById("rpcLatency").textContent = `${latency} ms`;
+      document.getElementById("liveDot").style.background = latency < 350 ? "var(--green)" : "var(--amber)";
+    } else {
+      document.getElementById("rpcLatency").textContent = "ERR";
+      document.getElementById("liveDot").style.background = "var(--red)";
+    }
+
+    if (hasWatchWallet) {
+      const balWei = await ethGetBalance(wAddr);
+      const bnbBal = Number(balWei) / 1e18;
+      document.getElementById("walletBnbBal").textContent = `${bnbBal.toFixed(4)} BNB`;
+    }
+
+    await updateBnbUsdPrice();
+  }
 }
 
 let lastActiveRenderedProjectId = null;
@@ -3088,60 +3371,223 @@ async function refreshActiveProject() {
     let rpcHost = lastSuccessfulRpcHost;
     let fetchFailed = false;
     let failReason = "";
+    let balanceUpdatedInBatch = false;
 
     try {
-      // 3.1 Fetch block number & latency
-      const bRes = await ethBlockNumber();
-      block = bRes.block;
-      rpcHost = bRes.rpcHost || lastSuccessfulRpcHost;
+      const tokenAddr = (p.token || "").toLowerCase();
+      const contractAddr = p.sale || p.presale;
+      const cachedMeta = tokenCache[tokenAddr];
+      const hasCachedMeta = cachedMeta && cachedMeta.decimals !== undefined;
+      const cachedPair = tokenCache[tokenAddr]?.pair;
 
-      // 3.2 Block Height Anti-Rollback Check
-      if (block && p.state.lastAppliedBlock && block < p.state.lastAppliedBlock) {
-        const cycleLatency = Math.round(performance.now() - cycleStart);
-        addLog("POLL", `${p.name} · 区块高度倒退 (#${block} < #${p.state.lastAppliedBlock}) · 丢弃本轮读数 · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
-        return; // Discard entire cycle's results, do NOT overwrite with older block
-      }
+      const walletToCheck = connectedWalletAddress || document.getElementById("watchWallet").value.trim();
+      const hasWallet = (walletToCheck && walletToCheck.startsWith("0x") && walletToCheck.length === 42);
 
-      // 3.3 Fetch metadata & pair address
-      meta = await fetchTokenMeta(p.token);
-      const pairAddr = await fetchPairAddress(p.token);
+      const progFn = p.progressFn && p.progressFn.trim() ? normalizeFn(p.progressFn) : "";
+      const progSel = progFn ? getSelector(progFn) : "";
 
-      // 3.4 Parallel fetch: pair reserves, presale sold, presale opened
-      const asyncTasks = [
-        readPresaleSoldShares(p),
-        checkPresaleOpened(p)
+      const openFn = p.openedFn && p.openedFn.trim() ? normalizeFn(p.openedFn) : "";
+      const openSel = openFn ? getSelector(openFn) : "";
+
+      // v10: Package all known cycle reads into Batch 1 (Target: 1 roundtrip for warm cycles)
+      const batch1Calls = [
+        { id: "block", method: "eth_blockNumber", params: [] }
       ];
-      if (pairAddr) {
-        asyncTasks.push(fetchPairReserves(pairAddr, p.token));
+
+      if (contractAddr && progSel) {
+        batch1Calls.push({ id: "sold", method: "eth_call", params: [{ to: contractAddr, data: progSel }, "latest"] });
+      }
+      if (contractAddr && openSel) {
+        batch1Calls.push({ id: "opened", method: "eth_call", params: [{ to: contractAddr, data: openSel }, "latest"] });
       }
 
-      const results = await Promise.all(asyncTasks);
-      soldInfo = results[0];
-      isOpenedFn = results[1];
-
-      if (isOpenedFn) liveEvidence.isOpenedFn = true;
-      if (soldInfo.success) {
-        p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
-        liveEvidence.sold = p.state.soldHighWater;
+      if (!hasCachedMeta && tokenAddr) {
+        batch1Calls.push({ id: "meta_sym", method: "eth_call", params: [{ to: tokenAddr, data: "0x95d89b41" }, "latest"] });
+        batch1Calls.push({ id: "meta_dec", method: "eth_call", params: [{ to: tokenAddr, data: "0x313ce567" }, "latest"] });
       }
 
-      if (pairAddr && results[2]) {
-        const { wbnbReserve, tokenReserve } = results[2];
-        if (wbnbReserve > 0n && tokenReserve > 0n) {
-          isPoolActive = true;
-          liveEvidence.isPoolActive = true;
-          wbnbNorm = Number(wbnbReserve) / 1e18;
-          tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
-          curPrice = wbnbNorm / tokNorm;
+      if (cachedPair) {
+        batch1Calls.push({ id: "reserves", method: "eth_call", params: [{ to: cachedPair, data: "0x0902f1ac" }, "latest"] });
+        batch1Calls.push({ id: "token0", method: "eth_call", params: [{ to: cachedPair, data: "0x0dfe1681" }, "latest"] });
+      } else if (tokenAddr) {
+        const pairData = "0xe6a43905" + padAddress(tokenAddr) + padAddress(WBNB);
+        batch1Calls.push({ id: "factory_pair", method: "eth_call", params: [{ to: FACTORY, data: pairData }, "latest"] });
+      }
+
+      if (hasWallet && tokenAddr) {
+        const balData = "0x70a08231" + padAddress(walletToCheck);
+        batch1Calls.push({ id: "wallet_bal", method: "eth_call", params: [{ to: tokenAddr, data: balData }, "latest"] });
+      }
+
+      const b1 = await rpcBatchRequest(batch1Calls);
+
+      if (b1.success) {
+        rpcHost = b1.rpcHost || lastSuccessfulRpcHost;
+        const blockHex = b1.results.block;
+        block = blockHex ? parseInt(blockHex, 16) : null;
+
+        // Block Height Anti-Rollback Check
+        if (block && p.state.lastAppliedBlock && block < p.state.lastAppliedBlock) {
+          const cycleLatency = Math.round(performance.now() - cycleStart);
+          addLog("POLL", `${p.name} · 区块高度倒退 (#${block} < #${p.state.lastAppliedBlock}) · 丢弃本轮读数 · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
+          return;
         }
-      }
 
-      const pairLink = document.getElementById("pairBscScanLink");
-      if (pairAddr) {
-        pairLink.href = `https://bscscan.com/address/${pairAddr}`;
-        pairLink.style.display = "inline";
+        // Token metadata
+        if (hasCachedMeta) {
+          meta = cachedMeta;
+        } else {
+          const sym = decodeString(b1.results.meta_sym) || "TOKEN";
+          const dec = b1.results.meta_dec ? parseInt(b1.results.meta_dec, 16) : 18;
+          if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
+          tokenCache[tokenAddr].symbol = sym;
+          tokenCache[tokenAddr].decimals = dec;
+          meta = tokenCache[tokenAddr];
+        }
+
+        // Sold shares
+        if (b1.results.sold && b1.results.sold !== "0x" && !b1.errors?.sold) {
+          try {
+            const val = BigInt(b1.results.sold);
+            soldInfo = { success: true, sold: Number(val), source: progFn };
+          } catch (e) {}
+        } else if (contractAddr) {
+          soldInfo = await readPresaleSoldShares(p);
+        }
+        if (soldInfo.success) {
+          p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+          liveEvidence.sold = p.state.soldHighWater;
+        }
+
+        // Presale opened
+        if (b1.results.opened && b1.results.opened !== "0x" && !b1.errors?.opened) {
+          try {
+            const val = BigInt(b1.results.opened);
+            if (val > 0n) {
+              isOpenedFn = true;
+              liveEvidence.isOpenedFn = true;
+            }
+          } catch (e) {}
+        } else if (contractAddr && !openSel) {
+          isOpenedFn = await checkPresaleOpened(p);
+          if (isOpenedFn) liveEvidence.isOpenedFn = true;
+        }
+
+        // Pair reserves
+        let pairAddr = cachedPair;
+        let resHex = b1.results.reserves;
+        let t0Hex = b1.results.token0;
+
+        if (!pairAddr && b1.results.factory_pair) {
+          const fRes = b1.results.factory_pair;
+          if (fRes && fRes.length >= 66) {
+            const pairFound = "0x" + fRes.slice(-40);
+            if (pairFound !== "0x0000000000000000000000000000000000000000") {
+              pairAddr = pairFound;
+              if (!tokenCache[tokenAddr]) tokenCache[tokenAddr] = {};
+              tokenCache[tokenAddr].pair = pairAddr;
+
+              // Batch 2: Newly discovered pair, query reserves & token0 in a 2nd batch (<= 2 roundtrips)
+              const b2 = await rpcBatchRequest([
+                { id: "reserves", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
+                { id: "token0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
+              ]);
+              if (b2.success) {
+                resHex = b2.results.reserves;
+                t0Hex = b2.results.token0;
+              }
+            }
+          }
+        }
+
+        if (resHex && resHex.length >= 130) {
+          const r0 = BigInt("0x" + resHex.slice(2, 66));
+          const r1 = BigInt("0x" + resHex.slice(66, 130));
+          const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
+          const isT0Wbnb = (t0 === WBNB.toLowerCase());
+          const wbnbReserve = isT0Wbnb ? r0 : r1;
+          const tokenReserve = isT0Wbnb ? r1 : r0;
+          if (wbnbReserve > 0n && tokenReserve > 0n) {
+            isPoolActive = true;
+            liveEvidence.isPoolActive = true;
+            wbnbNorm = Number(wbnbReserve) / 1e18;
+            tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
+            curPrice = wbnbNorm / tokNorm;
+          }
+        }
+
+        const pairLink = document.getElementById("pairBscScanLink");
+        if (pairAddr) {
+          pairLink.href = `https://bscscan.com/address/${pairAddr}`;
+          pairLink.style.display = "inline";
+        } else {
+          pairLink.style.display = "none";
+        }
+
+        // Sell Card Balance from Batch 1
+        if (b1.results.wallet_bal && b1.results.wallet_bal !== "0x" && !b1.errors?.wallet_bal) {
+          currentSellRawBalance = BigInt(b1.results.wallet_bal);
+          const norm = Number(currentSellRawBalance) / (10 ** meta.decimals);
+          document.getElementById("sellTokenBalance").textContent = `${norm.toLocaleString()} ${meta.symbol}`;
+          balanceUpdatedInBatch = true;
+        } else if (!hasWallet) {
+          currentSellRawBalance = 0n;
+          document.getElementById("sellTokenBalance").textContent = `0 ${meta.symbol}`;
+          balanceUpdatedInBatch = true;
+        }
+
       } else {
-        pairLink.style.display = "none";
+        // Fallback: Batch failed -> fallback to individual calls with failover
+        const bRes = await ethBlockNumber();
+        block = bRes.block;
+        rpcHost = bRes.rpcHost || lastSuccessfulRpcHost;
+
+        // Block Height Anti-Rollback Check
+        if (block && p.state.lastAppliedBlock && block < p.state.lastAppliedBlock) {
+          const cycleLatency = Math.round(performance.now() - cycleStart);
+          addLog("POLL", `${p.name} · 区块高度倒退 (#${block} < #${p.state.lastAppliedBlock}) · 丢弃本轮读数 · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
+          return;
+        }
+
+        meta = await fetchTokenMeta(p.token);
+        const pairAddr = await fetchPairAddress(p.token);
+
+        const asyncTasks = [
+          readPresaleSoldShares(p),
+          checkPresaleOpened(p)
+        ];
+        if (pairAddr) {
+          asyncTasks.push(fetchPairReserves(pairAddr, p.token));
+        }
+
+        const results = await Promise.all(asyncTasks);
+        soldInfo = results[0];
+        isOpenedFn = results[1];
+
+        if (isOpenedFn) liveEvidence.isOpenedFn = true;
+        if (soldInfo.success) {
+          p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+          liveEvidence.sold = p.state.soldHighWater;
+        }
+
+        if (pairAddr && results[2]) {
+          const { wbnbReserve, tokenReserve } = results[2];
+          if (wbnbReserve > 0n && tokenReserve > 0n) {
+            isPoolActive = true;
+            liveEvidence.isPoolActive = true;
+            wbnbNorm = Number(wbnbReserve) / 1e18;
+            tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
+            curPrice = wbnbNorm / tokNorm;
+          }
+        }
+
+        const pairLink = document.getElementById("pairBscScanLink");
+        if (pairAddr) {
+          pairLink.href = `https://bscscan.com/address/${pairAddr}`;
+          pairLink.style.display = "inline";
+        } else {
+          pairLink.style.display = "none";
+        }
       }
 
     } catch (err) {
@@ -3222,8 +3668,10 @@ async function refreshActiveProject() {
     // Manual box sync
     document.getElementById("manualSoldInput").value = p.manualSold || "";
 
-    // 8. Update Card C Sell Token Balance
-    await refreshSellCardBalance(p, meta);
+    // 8. Update Card C Sell Token Balance (only if not already updated in batch)
+    if (!balanceUpdatedInBatch) {
+      await refreshSellCardBalance(p, meta);
+    }
 
   } finally {
     projectRefreshInProgress.delete(p.id);
@@ -3830,6 +4278,53 @@ async function checkInstantSellEvidence(p) {
     return { triggered: true, reason: "模拟开盘证据注入 (自测验证)" };
   }
 
+  const contractAddr = p.sale || p.presale;
+  const tokenAddr = (p.token || "").toLowerCase();
+  const pairAddr = tokenCache[tokenAddr]?.pair;
+
+  // v10: Package opened check & pair reserves into single batch if pair is cached
+  if (contractAddr && pairAddr) {
+    const openFn = p.openedFn && p.openedFn.trim() ? normalizeFn(p.openedFn) : "openedAt()";
+    const batchRes = await rpcBatchRequest([
+      { id: "open", method: "eth_call", params: [{ to: contractAddr, data: getSelector(openFn) }, "latest"] },
+      { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
+      { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
+    ]);
+
+    if (batchRes.success) {
+      if (batchRes.results.open && batchRes.results.open !== "0x" && !batchRes.errors?.open) {
+        try {
+          if (BigInt(batchRes.results.open) > 0n) {
+            p.state.openedLatched = true;
+            return { triggered: true, reason: "发售合约开盘函数 (" + (p.openedFn || "openedAt/launched") + ") 返回 1" };
+          }
+        } catch (e) {}
+      }
+
+      const resHex = batchRes.results.res;
+      const t0Hex = batchRes.results.t0;
+      if (resHex && resHex.length >= 130) {
+        const r0 = BigInt("0x" + resHex.slice(2, 66));
+        const r1 = BigInt("0x" + resHex.slice(66, 130));
+        const t0 = t0Hex ? "0x" + t0Hex.slice(-40).toLowerCase() : "";
+        const isT0Wbnb = (t0 === WBNB.toLowerCase());
+        const wbnbReserve = isT0Wbnb ? r0 : r1;
+        const tokenReserve = isT0Wbnb ? r1 : r0;
+        if (wbnbReserve > 0n && tokenReserve > 0n) {
+          const meta = await fetchTokenMeta(p.token);
+          const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
+          try {
+            const quoteOut = await quoteSell(testAmount, p.token);
+            if (quoteOut > 0n) {
+              p.state.openedLatched = true;
+              return { triggered: true, reason: "流动池双边储备正常 (" + (Number(wbnbReserve)/1e18).toFixed(2) + " BNB) 且 Router 成功报价" };
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
   // 1. Check presale contract openedFn
   const isOpenedFn = await checkPresaleOpened(p);
   if (isOpenedFn) {
@@ -3838,9 +4333,9 @@ async function checkInstantSellEvidence(p) {
   }
 
   // 2. Check pair reserves on both sides > 0 and Router can quote
-  const pairAddr = await fetchPairAddress(p.token);
-  if (pairAddr) {
-    const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
+  const pAddr = pairAddr || await fetchPairAddress(p.token);
+  if (pAddr) {
+    const { wbnbReserve, tokenReserve } = await fetchPairReserves(pAddr, p.token);
     if (wbnbReserve > 0n && tokenReserve > 0n) {
       const meta = await fetchTokenMeta(p.token);
       const testAmount = currentSellRawBalance > 0n ? currentSellRawBalance : BigInt(10 ** meta.decimals);
@@ -4814,7 +5309,7 @@ projects.forEach(p => {
 // Immediately trigger manifest sync on page load
 syncProjectsManifest();
 
-addLog("SYS", "Agent 打新交互看板已加载完成。v8 自建中继数据通道就绪。");
+addLog("SYS", "Agent 打新交互看板已加载完成。v10 中继粘性主通道 + JSON-RPC 批量引擎就绪。");
 
 // Periodic Timers
 // 1. Top bar block & balance: 3s
