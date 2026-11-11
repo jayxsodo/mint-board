@@ -667,11 +667,37 @@
   }
   .log-time { color: var(--text-muted); }
   .log-tag-PRICE { color: var(--blue); }
+  .log-tag-POLL { color: #38bdf8; font-weight: 500; }
   .log-tag-BOT { color: var(--purple); font-weight: 600; }
   .log-tag-SELL { color: var(--green); font-weight: 600; }
   .log-tag-ERROR { color: var(--red); font-weight: 600; }
   .log-tag-SIM { color: var(--amber); }
   .log-tag-SYS { color: var(--text-dim); }
+
+  .snapshot-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+  .snapshot-badge.badge-pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--amber);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
+  .snapshot-badge.badge-failed {
+    background: rgba(244, 63, 94, 0.15);
+    color: var(--red);
+    border: 1px solid rgba(244, 63, 94, 0.35);
+  }
+  .snapshot-dim {
+    opacity: 0.52;
+    transition: opacity 0.2s ease;
+  }
 
   /* Modals */
   .modal-overlay {
@@ -801,6 +827,7 @@
       <div class="progress-numbers">
         <span id="sharesSoldNum">—</span>
         <small>/ <span id="totalSharesNum">—</span> 份</small>
+        <span class="snapshot-badge" id="cardASnapshotBadge" style="display:none"></span>
       </div>
       <div class="progress-pct" id="sharesSoldPct">0.0%</div>
     </div>
@@ -868,6 +895,7 @@
         <div class="main-price-val">
           <span id="curPriceBnb">—</span>
           <small id="curPriceUsd">($—)</small>
+          <span class="snapshot-badge" id="cardBSnapshotBadge" style="display:none"></span>
         </div>
       </div>
       <div class="multiples-badges">
@@ -1098,8 +1126,12 @@
       <span>控制台日志</span>
     </div>
     <div style="display:flex; align-items:center; gap:10px">
+      <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--text-dim); cursor:pointer;">
+        <input type="checkbox" id="showPollLogsToggle" checked> 显示轮询日志
+      </label>
       <select id="logFilterSelect" style="padding:3px 8px; font-size:12px">
         <option value="ALL">全部日志</option>
+        <option value="POLL">轮询记录</option>
         <option value="PRICE">价格监测</option>
         <option value="BOT">机器人动作</option>
         <option value="SELL">卖出操作</option>
@@ -1427,6 +1459,7 @@ const RPCS = [
   "https://rpc.ankr.com/bsc"
 ];
 let currentRpcIdx = 0;
+let lastSuccessfulRpcHost = "bsc-dataseed.bnbchain.org";
 
 async function rpcRequest(method, params = []) {
   const start = performance.now();
@@ -1446,7 +1479,10 @@ async function rpcRequest(method, params = []) {
 
       if (res && res.result !== undefined) {
         const latency = Math.round(performance.now() - start);
-        return { result: res.result, latency };
+        let host = "";
+        try { host = new URL(rpcUrl).host; } catch (e) { host = rpcUrl; }
+        lastSuccessfulRpcHost = host;
+        return { result: res.result, latency, rpcHost: host };
       }
     } catch (e) {
       // rotate RPC
@@ -1454,12 +1490,12 @@ async function rpcRequest(method, params = []) {
     currentRpcIdx = (currentRpcIdx + 1) % RPCS.length;
     attempts++;
   }
-  return { result: null, latency: 999 };
+  return { result: null, latency: 999, rpcHost: null };
 }
 
 async function ethCall(to, data) {
-  const { result, latency } = await rpcRequest("eth_call", [{ to, data }, "latest"]);
-  return { result, latency };
+  const { result, latency, rpcHost } = await rpcRequest("eth_call", [{ to, data }, "latest"]);
+  return { result, latency, rpcHost };
 }
 
 async function ethGetBalance(addr) {
@@ -1468,8 +1504,8 @@ async function ethGetBalance(addr) {
 }
 
 async function ethBlockNumber() {
-  const { result, latency } = await rpcRequest("eth_blockNumber", []);
-  return { block: result ? parseInt(result, 16) : null, latency };
+  const { result, latency, rpcHost } = await rpcRequest("eth_blockNumber", []);
+  return { block: result ? parseInt(result, 16) : null, latency, rpcHost: rpcHost || lastSuccessfulRpcHost };
 }
 
 // ==========================================
@@ -1477,123 +1513,176 @@ async function ethBlockNumber() {
 // ==========================================
 const DEFAULT_PROJECTS = [
   {
-    id: "dogeking",
-    name: "DogeKing 狗王",
-    token: "0xaB36C1C92a3De7462b91306c63C63A4bD5317972",
-    sale: "0xd73A0cDCe58e07D8e2a38EE771Cc3aBC45B6FA45",
-    presale: "0xd73A0cDCe58e07D8e2a38EE771Cc3aBC45B6FA45",
-    pricePerShare: 0.002,
-    tokensPerShare: 1000000,
+    id: "feg",
+    name: "FEG 大猩猩",
+    token: "0x701d2Eea5049Eb3e9c69F7B6dFf4C5f010eaE54c",
+    sale: "0xb9d0CA9b63C564443AfE64B77ef91B3bA763e5f1",
+    presale: "0xb9d0CA9b63C564443AfE64B77ef91B3bA763e5f1",
+    pricePerShare: 0.005,
+    tokensPerShare: 100000,
     totalShares: 10000,
-    taxPct: 0,
-    sellTax: 0.0,
-    startAt: "2026-11-10T19:00:00+08:00",
-    launchTime: "2026-11-10T19:00:00+08:00",
-    endAt: "2026-12-10T19:00:00+08:00",
-    endTime: "2026-12-10T19:00:00+08:00",
+    taxPct: 2,
+    sellTax: 2,
+    startAt: "2026-11-11T00:00:00+08:00",
+    launchTime: "2026-11-11T00:00:00+08:00",
+    endAt: "2026-11-18T00:00:00+08:00",
+    endTime: "2026-11-18T00:00:00+08:00",
     heldShares: 0,
-    progressFn: "sold",
-    openedFn: "",
+    progressFn: "openingSold",
+    openedFn: "openedAt",
     note: "",
     manualSold: 0,
     source: "sync",
-    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
   },
   {
-    id: "gout",
-    name: "GOUT",
-    token: "0xd4B9BFd03c19c0ac0dd3578Be7A5cabD07A27772",
-    sale: "0x3246Ca2024DC2B17BF1c6Bc4aCD9E69293CECDBB",
-    presale: "0x3246Ca2024DC2B17BF1c6Bc4aCD9E69293CECDBB",
-    pricePerShare: 0.002,
-    tokensPerShare: 50000000,
-    totalShares: 10000,
-    taxPct: 2.0,
-    sellTax: 2.0,
-    startAt: "2026-11-10T18:00:00+08:00",
-    launchTime: "2026-11-10T18:00:00+08:00",
-    endAt: "2026-11-11T18:00:00+08:00",
-    endTime: "2026-11-11T18:00:00+08:00",
-    heldShares: 0,
-    progressFn: "totalMinted",
-    openedFn: "opened",
-    note: "",
-    manualSold: 0,
-    source: "sync",
-    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
-  },
-  {
-    id: "akita",
-    name: "AKITA",
-    token: "0xf6720636bDfBe84973a487A9e70A5408F94f6029",
-    sale: "0xEC8E6ab3adf02F4002E9f0dba0A528c55e99b19c",
-    presale: "0xEC8E6ab3adf02F4002E9f0dba0A528c55e99b19c",
-    pricePerShare: 0.002,
-    tokensPerShare: 60000000,
-    totalShares: 10000,
-    taxPct: 2.0,
-    sellTax: 2.0,
-    startAt: "2026-11-10T20:00:00+08:00",
-    launchTime: "2026-11-10T20:00:00+08:00",
-    endAt: "2026-11-11T20:00:00+08:00",
-    endTime: "2026-11-11T20:00:00+08:00",
-    heldShares: 0,
-    progressFn: "totalMinted",
-    openedFn: "launched",
-    note: "",
-    manualSold: 0,
-    source: "sync",
-    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
-  },
-  {
-    id: "whale",
-    name: "WHALE 鲸鱼",
-    token: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
-    sale: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
-    presale: "0xDd5cc8755D8aF6539DcfD73de31e07794bFdD30A",
-    pricePerShare: 0.003,
-    tokensPerShare: 36000000,
-    totalShares: 7167,
-    taxPct: 2.0,
-    sellTax: 2.0,
-    startAt: "2026-11-10T20:00:00+08:00",
-    launchTime: "2026-11-10T20:00:00+08:00",
-    endAt: "2026-11-11T20:00:00+08:00",
-    endTime: "2026-11-11T20:00:00+08:00",
+    id: "fairbnb",
+    name: "FAIRBNB",
+    token: "0xa30c2Ca45Da5fF583a13256af824a67cA74A5097",
+    sale: "0x3C84f6509f1Dfa516740EF2C92e66628A33347E2",
+    presale: "0x3C84f6509f1Dfa516740EF2C92e66628A33347E2",
+    pricePerShare: 0.0015,
+    tokensPerShare: 6000,
+    totalShares: 5000,
+    taxPct: 3,
+    sellTax: 3,
+    startAt: "2026-11-10T23:00:00+08:00",
+    launchTime: "2026-11-10T23:00:00+08:00",
+    endAt: "2026-11-17T23:00:00+08:00",
+    endTime: "2026-11-17T23:00:00+08:00",
     heldShares: 0,
     progressFn: "sharesSold",
     openedFn: "",
     note: "",
     manualSold: 0,
     source: "sync",
-    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
   },
   {
-    id: "broccoli",
-    name: "Broccoli 西兰花",
-    token: "0xc438821D5937E5246a50f877311a74e40f82eB87",
-    sale: "0xc438821D5937E5246a50f877311a74e40f82eB87",
-    presale: "0xc438821D5937E5246a50f877311a74e40f82eB87",
-    pricePerShare: 0.003,
-    tokensPerShare: 30000000,
-    totalShares: 11000,
-    taxPct: 3.5,
-    sellTax: 3.5,
+    id: "ponk",
+    name: "PONK",
+    token: "0x2F9d7672f393d6C0482e60Ce10cada28B201b721",
+    sale: "0x2e4Fe87DfF5465F95F23908276B7B6b4a510217A",
+    presale: "0x2e4Fe87DfF5465F95F23908276B7B6b4a510217A",
+    pricePerShare: 0.002,
+    tokensPerShare: 50000000,
+    totalShares: 10000,
+    taxPct: 2,
+    sellTax: 2,
     startAt: "2026-11-10T22:00:00+08:00",
     launchTime: "2026-11-10T22:00:00+08:00",
-    endAt: "2026-11-11T22:00:00+08:00",
-    endTime: "2026-11-11T22:00:00+08:00",
+    endAt: "2026-11-17T22:00:00+08:00",
+    endTime: "2026-11-17T22:00:00+08:00",
     heldShares: 0,
     progressFn: "totalMinted",
     openedFn: "opened",
     note: "",
     manualSold: 0,
     source: "sync",
-    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
+  },
+  {
+    id: "hajimi",
+    name: "Hajimi 哈基米",
+    token: "0x8D9DE194b3fDabc846e78f34dE7191c639adc176",
+    sale: "0x8D9DE194b3fDabc846e78f34dE7191c639adc176",
+    presale: "0x8D9DE194b3fDabc846e78f34dE7191c639adc176",
+    pricePerShare: 0.003,
+    tokensPerShare: 30000000,
+    totalShares: 11000,
+    taxPct: 3.5,
+    sellTax: 3.5,
+    startAt: "2026-11-10T22:30:00+08:00",
+    launchTime: "2026-11-10T22:30:00+08:00",
+    endAt: "2026-11-13T22:30:00+08:00",
+    endTime: "2026-11-13T22:30:00+08:00",
+    heldShares: 0,
+    progressFn: "totalMinted",
+    openedFn: "opened",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
+  },
+  {
+    id: "shine",
+    name: "SHINE",
+    token: "0xDDc2352d1ceC10b42e05A297232f5328902C6c2C",
+    sale: "0xDDc2352d1ceC10b42e05A297232f5328902C6c2C",
+    presale: "0xDDc2352d1ceC10b42e05A297232f5328902C6c2C",
+    pricePerShare: 0.000401254,
+    tokensPerShare: 9081.713688,
+    totalShares: 15000,
+    taxPct: 1,
+    sellTax: 1,
+    startAt: "2026-11-11T19:00:00+08:00",
+    launchTime: "2026-11-11T19:00:00+08:00",
+    endAt: "2026-11-12T19:00:00+08:00",
+    endTime: "2026-11-12T19:00:00+08:00",
+    heldShares: 0,
+    progressFn: "sharesSold",
+    openedFn: "",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
+  },
+  {
+    id: "xiuxian",
+    name: "修仙时代 XIUXIAN",
+    token: "0xfc12863428311757dff7c6b1035aae86d97be337",
+    sale: "0x965e6bAdAFff332c9721B714E674e5171c1D3B55",
+    presale: "0x965e6bAdAFff332c9721B714E674e5171c1D3B55",
+    pricePerShare: 0.003,
+    tokensPerShare: 30000000,
+    totalShares: 11000,
+    taxPct: 0,
+    sellTax: 0,
+    startAt: "2026-11-10T22:32:00+08:00",
+    launchTime: "2026-11-10T22:32:00+08:00",
+    endAt: "2026-11-13T22:32:00+08:00",
+    endTime: "2026-11-13T22:32:00+08:00",
+    heldShares: 0,
+    progressFn: "sharesSold",
+    openedFn: "poolOpened",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
+  },
+  {
+    id: "hajimi2",
+    name: "哈基米agent（新站）",
+    token: "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
+    sale: "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
+    presale: "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
+    pricePerShare: 0.003,
+    tokensPerShare: 79000000,
+    totalShares: 11000,
+    taxPct: 3.5,
+    sellTax: 3.5,
+    startAt: "2026-11-11T12:00:00+08:00",
+    launchTime: "2026-11-11T12:00:00+08:00",
+    endAt: "2026-11-14T12:00:00+08:00",
+    endTime: "2026-11-14T12:00:00+08:00",
+    heldShares: 0,
+    progressFn: "totalMinted",
+    openedFn: "opened",
+    note: "",
+    manualSold: 0,
+    source: "sync",
+    state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
   }
 ];
 
 const PRESET_TOKEN_MAPPING = {
+  "0x701d2eea5049eb3e9c69f7b6dff4c5f010eae54c": { id: "feg", progressFn: "openingSold", openedFn: "openedAt" },
+  "0xa30c2ca45da5ff583a13256af824a67ca74a5097": { id: "fairbnb", progressFn: "sharesSold", openedFn: "" },
+  "0x2f9d7672f393d6c0482e60ce10cada28b201b721": { id: "ponk", progressFn: "totalMinted", openedFn: "opened" },
+  "0x8d9de194b3fdabc846e78f34de7191c639adc176": { id: "hajimi", progressFn: "totalMinted", openedFn: "opened" },
+  "0xddc2352d1cec10b42e05a297232f5328902c6c2c": { id: "shine", progressFn: "sharesSold", openedFn: "" },
+  "0xfc12863428311757dff7c6b1035aae86d97be337": { id: "xiuxian", progressFn: "sharesSold", openedFn: "poolOpened" },
+  "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990": { id: "hajimi2", progressFn: "totalMinted", openedFn: "opened" },
   "0xab36c1c92a3de7462b91306c63c63a4bd5317972": { id: "dogeking", progressFn: "sold", openedFn: "" },
   "0xd4b9bfd03c19c0ac0dd3578be7a5cabd07a27772": { id: "gout", progressFn: "totalMinted", openedFn: "opened" },
   "0xf6720636bdfbe84973a487a9e70a5408f94f6029": { id: "akita", progressFn: "totalMinted", openedFn: "launched" },
@@ -1631,8 +1720,11 @@ function normalizeProject(p) {
       openedLatched: false,
       openedAt: null,
       soldHighWater: 0,
-      lastGood: null
+      lastGood: null,
+      lastAppliedBlock: 0
     };
+  } else if (p.state.lastAppliedBlock === undefined) {
+    p.state.lastAppliedBlock = 0;
   }
 
   // Migrate legacy openKey if present
@@ -1764,7 +1856,9 @@ function applySyncedProjects(manifestProjects) {
       existing.source = "sync";
 
       if (!existing.state) {
-        existing.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
+        existing.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 };
+      } else if (existing.state.lastAppliedBlock === undefined) {
+        existing.state.lastAppliedBlock = 0;
       }
     } else {
       const newProj = {
@@ -1788,7 +1882,7 @@ function applySyncedProjects(manifestProjects) {
         heldShares: 0,
         manualSold: 0,
         source: "sync",
-        state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null }
+        state: { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 }
       };
       projects.push(newProj);
       loadBuiltinBot(newProj.id);
@@ -1851,6 +1945,22 @@ function saveBots() {
 // ==========================================
 // 4. LOGGING TERMINAL
 // ==========================================
+function updateLogLineVisibility(row) {
+  const showPoll = document.getElementById("showPollLogsToggle")?.checked ?? true;
+  const currentFilter = document.getElementById("logFilterSelect")?.value || "ALL";
+  const tag = row.dataset.tag;
+
+  if (tag === "POLL" && !showPoll && currentFilter !== "POLL") {
+    row.style.display = "none";
+    return;
+  }
+  if (currentFilter === "ALL" || currentFilter === tag) {
+    row.style.display = "flex";
+  } else {
+    row.style.display = "none";
+  }
+}
+
 function addLog(tag, msg, projId = null) {
   const container = document.getElementById("logTerminal");
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
@@ -1860,10 +1970,23 @@ function addLog(tag, msg, projId = null) {
   row.dataset.project = projId || "";
 
   row.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-tag-${tag}">[${tag}]</span> <span>${escapeHtml(msg)}</span>`;
+  updateLogLineVisibility(row);
   container.appendChild(row);
 
+  // Maintain 300-row rolling cap, prioritizing removal of oldest POLL lines
   if (container.children.length > 300) {
-    container.removeChild(container.firstChild);
+    let pollChild = null;
+    for (let i = 0; i < container.children.length; i++) {
+      if (container.children[i].dataset.tag === "POLL") {
+        pollChild = container.children[i];
+        break;
+      }
+    }
+    if (pollChild) {
+      container.removeChild(pollChild);
+    } else {
+      container.removeChild(container.firstChild);
+    }
   }
   container.scrollTop = container.scrollHeight;
 }
@@ -2118,6 +2241,7 @@ function renderProjectTabs() {
 function selectProject(idx) {
   if (idx < 0 || idx >= projects.length) return;
   activeProjectIdx = idx;
+  lastActiveRenderedProjectId = null; // Force showing snapshot + pending state on click/switch
   renderProjectTabs();
   refreshActiveProject();
   renderBuiltinBotSection();
@@ -2131,6 +2255,52 @@ window.addEventListener("keydown", (e) => {
     selectProject(num - 1);
   }
 });
+
+// Helper: Snapshot badge & dimming management
+function setSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null) {
+  const badgeA = document.getElementById("cardASnapshotBadge");
+  const badgeB = document.getElementById("cardBSnapshotBadge");
+  const dimEls = [
+    document.getElementById("sharesSoldNum"),
+    document.getElementById("sharesSoldPct"),
+    document.getElementById("curPriceBnb"),
+    document.getElementById("curPriceUsd"),
+    document.getElementById("nominalMultiple"),
+    document.getElementById("netMultiple")
+  ];
+
+  if (!isSnapshot && !isPending && !isFailed) {
+    if (badgeA) badgeA.style.display = "none";
+    if (badgeB) badgeB.style.display = "none";
+    dimEls.forEach(el => el && el.classList.remove("snapshot-dim"));
+    return;
+  }
+
+  let text = "";
+  let className = "snapshot-badge ";
+  if (isPending) {
+    className += "badge-pending";
+    text = snapTs ? `快照 ${snapTs} · 读取中…` : "读取中…";
+  } else if (isFailed) {
+    className += "badge-failed";
+    text = snapTs ? `快照 ${snapTs} · 本轮读取失败` : "本轮读取失败";
+  } else {
+    className += "badge-pending";
+    text = snapTs ? `快照 ${snapTs}` : "快照数据";
+  }
+
+  if (badgeA) {
+    badgeA.textContent = text;
+    badgeA.className = className;
+    badgeA.style.display = "inline-block";
+  }
+  if (badgeB) {
+    badgeB.textContent = text;
+    badgeB.className = className;
+    badgeB.style.display = "inline-block";
+  }
+  dimEls.forEach(el => el && el.classList.add("snapshot-dim"));
+}
 
 // Render Card A: Presale Progress
 function renderProgressCard(p, soldCount, totalCount, isSnapshot, statusSourceText) {
@@ -2164,9 +2334,7 @@ function renderPriceCard(p, curPrice, wbnbNorm, tokNorm, symbol, basePriceBnb, i
   if (curPrice > 0) {
     document.getElementById("curPriceBnb").textContent = `${curPrice.toExponential(4)} BNB`;
     const curPriceUsd = curPrice * bnbUsdPrice;
-    const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
-    const snapText = isSnapshot && snapTs ? ` (数据于 ${snapTs})` : "";
-    document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})${snapText}`;
+    document.getElementById("curPriceUsd").textContent = `($${curPriceUsd.toExponential(3)})`;
 
     const taxPct = p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0);
     const nomMult = basePriceBnb > 0 ? (curPrice / basePriceBnb) : 0;
@@ -2295,172 +2463,248 @@ async function refreshTopBar() {
   await updateBnbUsdPrice();
 }
 
+let lastActiveRenderedProjectId = null;
+const projectRefreshInProgress = new Set();
+
 async function refreshActiveProject() {
   const p = projects[activeProjectIdx];
   if (!p) return;
 
-  // Card Titles with Project Name
-  const cardATitle = document.getElementById("cardATitle");
-  if (cardATitle) cardATitle.textContent = "发售进度 · " + p.name;
-  const cardBTitle = document.getElementById("cardBTitle");
-  if (cardBTitle) cardBTitle.textContent = "价格与收益 · " + p.name;
-  const cardCTitle = document.getElementById("cardCTitle");
-  if (cardCTitle) cardCTitle.textContent = "卖出面板 · " + p.name;
-  const cardDTitle = document.getElementById("cardDTitle");
-  if (cardDTitle) cardDTitle.textContent = "卖出机器人 · " + p.name;
-
-  if (!p.state) {
-    p.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null };
+  // 1. Serialization check: if this project is already refreshing, skip next trigger
+  if (projectRefreshInProgress.has(p.id)) {
+    return;
   }
-
-  // Base price per token: pricePerShare / tokensPerShare
-  const basePriceBnb = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
-  document.getElementById("benchmarkPrice").textContent = `${basePriceBnb.toExponential(4)} BNB`;
-  document.getElementById("perShareDesc").textContent = `${p.pricePerShare} BNB = ${Number(p.tokensPerShare).toLocaleString()} 枚`;
-  document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
-  const myCostBnb = (p.heldShares || 0) * (p.pricePerShare || 0);
-  document.getElementById("myCostSummary").textContent = `份 = ${myCostBnb.toFixed(4)} BNB ($${(myCostBnb * bnbUsdPrice).toFixed(1)})`;
-  document.getElementById("sellProjectTax").textContent = `${p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0)}%`;
-
-  // Countdown & Time status
-  const now = Date.now();
-  const launchTs = parseTimestamp(p.startAt || p.launchTime);
-  const endTs = parseTimestamp(p.endAt || p.endTime);
-
-  let timeStatus = "未开始";
-  if (launchTs) {
-    timeStatus = now >= launchTs ? "已开始" : "未开始";
-    document.getElementById("launchTimeStatus").textContent = `${p.startAt || p.launchTime} (${timeStatus})`;
-  } else {
-    document.getElementById("launchTimeStatus").textContent = "未设定";
-  }
-
-  if (endTs) {
-    if (now >= endTs) {
-      document.getElementById("countdownEnd").textContent = "已截止";
-    } else {
-      const diffSec = Math.floor((endTs - now) / 1000);
-      const d = Math.floor(diffSec / 86400);
-      const h = Math.floor((diffSec % 86400) / 3600);
-      const m = Math.floor((diffSec % 3600) / 60);
-      document.getElementById("countdownEnd").textContent = `${d}天 ${h}时 ${m}分`;
-    }
-  } else {
-    document.getElementById("countdownEnd").textContent = "—";
-  }
-
-  // ==========================================
-  // [Revision 2 Fix]: Step 1 - Immediate First Render from Snapshot & Latch
-  // ==========================================
-  const totalCount = p.totalShares || 10000;
-  const initialHighWater = (p.state && p.state.soldHighWater) || 0;
-  const initialSold = Math.max(initialHighWater, p.state?.lastGood?.sold || 0, p.manualSold || 0);
-  const initialStatus = determineProjectStatus(p, timeStatus);
-  updateStatusBadges(p, initialStatus.status, initialStatus.badgeClass);
-
-  if (p.state?.lastGood && p.state.lastGood.price > 0) {
-    renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceBnb, true);
-    renderProgressCard(p, initialSold, totalCount, true, null);
-  } else {
-    renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false);
-    renderProgressCard(p, initialSold, totalCount, false, p.manualSold ? "手动录入" : "等待链上读取");
-  }
-
-  // ==========================================
-  // Step 2 - Async On-Chain Query
-  // ==========================================
-  let liveEvidence = {};
-  let curPrice = 0;
-  let isPoolActive = false;
-  let wbnbNorm = 0;
-  let tokNorm = 0;
-  let meta = { symbol: "TOKEN", decimals: 18 };
-  let soldInfo = { success: false, sold: initialSold, source: "未读取" };
-  let fetchFailed = false;
+  projectRefreshInProgress.add(p.id);
 
   try {
-    meta = await fetchTokenMeta(p.token);
+    // Synchronous Card Titles & Basic Project Meta
+    const cardATitle = document.getElementById("cardATitle");
+    if (cardATitle) cardATitle.textContent = "发售进度 · " + p.name;
+    const cardBTitle = document.getElementById("cardBTitle");
+    if (cardBTitle) cardBTitle.textContent = "价格与收益 · " + p.name;
+    const cardCTitle = document.getElementById("cardCTitle");
+    if (cardCTitle) cardCTitle.textContent = "卖出面板 · " + p.name;
+    const cardDTitle = document.getElementById("cardDTitle");
+    if (cardDTitle) cardDTitle.textContent = "卖出机器人 · " + p.name;
 
-    const pairAddr = await fetchPairAddress(p.token);
-    if (pairAddr) {
-      document.getElementById("pairBscScanLink").href = `https://bscscan.com/address/${pairAddr}`;
-      document.getElementById("pairBscScanLink").style.display = "inline";
-      const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
+    if (!p.state) {
+      p.state = { openedLatched: false, openedAt: null, soldHighWater: 0, lastGood: null, lastAppliedBlock: 0 };
+    } else if (p.state.lastAppliedBlock === undefined) {
+      p.state.lastAppliedBlock = 0;
+    }
 
-      if (tokenReserve > 0n && wbnbReserve > 0n) {
-        isPoolActive = true;
-        liveEvidence.isPoolActive = true;
-        wbnbNorm = Number(wbnbReserve) / 1e18;
-        tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
-        curPrice = wbnbNorm / tokNorm;
+    // Base price per token: pricePerShare / tokensPerShare
+    const basePriceBnb = (p.pricePerShare && p.tokensPerShare) ? (p.pricePerShare / p.tokensPerShare) : 0;
+    document.getElementById("benchmarkPrice").textContent = `${p.pricePerShare} BNB (${basePriceBnb.toExponential(4)}/枚)`;
+    document.getElementById("perShareDesc").textContent = `${p.pricePerShare} BNB = ${Number(p.tokensPerShare).toLocaleString()} 枚`;
+    document.getElementById("myHeldSharesInput").value = p.heldShares || 0;
+    const myCostBnb = (p.heldShares || 0) * (p.pricePerShare || 0);
+    document.getElementById("myCostSummary").textContent = `份 = ${myCostBnb.toFixed(4)} BNB ($${(myCostBnb * bnbUsdPrice).toFixed(1)})`;
+    document.getElementById("sellProjectTax").textContent = `${p.taxPct !== undefined ? p.taxPct : (p.sellTax || 0)}%`;
+
+    // Countdown & Time status
+    const now = Date.now();
+    const launchTs = parseTimestamp(p.startAt || p.launchTime);
+    const endTs = parseTimestamp(p.endAt || p.endTime);
+
+    let timeStatus = "未开始";
+    if (launchTs) {
+      timeStatus = now >= launchTs ? "已开始" : "未开始";
+      document.getElementById("launchTimeStatus").textContent = `${p.startAt || p.launchTime} (${timeStatus})`;
+    } else {
+      document.getElementById("launchTimeStatus").textContent = "未设定";
+    }
+
+    if (endTs) {
+      if (now >= endTs) {
+        document.getElementById("countdownEnd").textContent = "已截止";
+      } else {
+        const diffSec = Math.floor((endTs - now) / 1000);
+        const d = Math.floor(diffSec / 86400);
+        const h = Math.floor((diffSec % 86400) / 3600);
+        const m = Math.floor((diffSec % 3600) / 60);
+        document.getElementById("countdownEnd").textContent = `${d}天 ${h}时 ${m}分`;
       }
     } else {
-      document.getElementById("pairBscScanLink").style.display = "none";
+      document.getElementById("countdownEnd").textContent = "—";
     }
 
-    soldInfo = await readPresaleSoldShares(p);
-    if (soldInfo.success) {
-      liveEvidence.sold = soldInfo.sold;
-      p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+    const totalCount = p.totalShares || 10000;
+    const initialHighWater = (p.state && p.state.soldHighWater) || 0;
+    const initialSold = Math.max(initialHighWater, p.state?.lastGood?.sold || 0, p.manualSold || 0);
+
+    // 2. If entering/switching project, display snapshot with "快照 HH:MM:SS · 读取中…"
+    const isProjectSwitch = (lastActiveRenderedProjectId !== p.id);
+    if (isProjectSwitch) {
+      const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+      const initialStatus = determineProjectStatus(p, timeStatus);
+      updateStatusBadges(p, initialStatus.status, initialStatus.badgeClass);
+
+      if (p.state?.lastGood && p.state.lastGood.price > 0) {
+        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceBnb, true);
+        renderProgressCard(p, initialSold, totalCount, true, null);
+      } else {
+        renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false);
+        renderProgressCard(p, initialSold, totalCount, false, p.manualSold ? "手动录入" : "等待链上读取");
+      }
+      setSnapshotBadgeState(true, true, false, snapTs);
+      lastActiveRenderedProjectId = p.id;
     }
 
-    const isOpenedFn = await checkPresaleOpened(p);
-    if (isOpenedFn) {
-      liveEvidence.isOpenedFn = true;
+    // 3. Collect ALL on-chain reads for this cycle (Atomic Gathering, NO intermediate renders)
+    const cycleStart = performance.now();
+    let liveEvidence = {};
+    let curPrice = 0;
+    let isPoolActive = false;
+    let wbnbNorm = 0;
+    let tokNorm = 0;
+    let meta = { symbol: "TOKEN", decimals: 18 };
+    let soldInfo = { success: false, sold: initialSold, source: "未读取" };
+    let isOpenedFn = false;
+    let block = null;
+    let rpcHost = lastSuccessfulRpcHost;
+    let fetchFailed = false;
+    let failReason = "";
+
+    try {
+      // 3.1 Fetch block number & latency
+      const bRes = await ethBlockNumber();
+      block = bRes.block;
+      rpcHost = bRes.rpcHost || lastSuccessfulRpcHost;
+
+      // 3.2 Block Height Anti-Rollback Check
+      if (block && p.state.lastAppliedBlock && block < p.state.lastAppliedBlock) {
+        const cycleLatency = Math.round(performance.now() - cycleStart);
+        addLog("POLL", `${p.name} · 区块高度倒退 (#${block} < #${p.state.lastAppliedBlock}) · 丢弃本轮读数 · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
+        return; // Discard entire cycle's results, do NOT overwrite with older block
+      }
+
+      // 3.3 Fetch metadata & pair address
+      meta = await fetchTokenMeta(p.token);
+      const pairAddr = await fetchPairAddress(p.token);
+
+      // 3.4 Parallel fetch: pair reserves, presale sold, presale opened
+      const asyncTasks = [
+        readPresaleSoldShares(p),
+        checkPresaleOpened(p)
+      ];
+      if (pairAddr) {
+        asyncTasks.push(fetchPairReserves(pairAddr, p.token));
+      }
+
+      const results = await Promise.all(asyncTasks);
+      soldInfo = results[0];
+      isOpenedFn = results[1];
+
+      if (isOpenedFn) liveEvidence.isOpenedFn = true;
+      if (soldInfo.success) {
+        liveEvidence.sold = soldInfo.sold;
+        p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+      }
+
+      if (pairAddr && results[2]) {
+        const { wbnbReserve, tokenReserve } = results[2];
+        if (wbnbReserve > 0n && tokenReserve > 0n) {
+          isPoolActive = true;
+          liveEvidence.isPoolActive = true;
+          wbnbNorm = Number(wbnbReserve) / 1e18;
+          tokNorm = Number(tokenReserve) / (10 ** meta.decimals);
+          curPrice = wbnbNorm / tokNorm;
+        }
+      }
+
+      const pairLink = document.getElementById("pairBscScanLink");
+      if (pairAddr) {
+        pairLink.href = `https://bscscan.com/address/${pairAddr}`;
+        pairLink.style.display = "inline";
+      } else {
+        pairLink.style.display = "none";
+      }
+
+    } catch (err) {
+      console.warn("Live on-chain query encountered error:", err);
+      fetchFailed = true;
+      failReason = err.message || "RPC网络异常";
     }
 
-  } catch (err) {
-    console.warn("Live on-chain query encountered error:", err);
-    fetchFailed = true;
-  }
+    const cycleLatency = Math.round(performance.now() - cycleStart);
 
-  // Latch opened status permanently if any evidence confirms opened
-  const soldForCheck = liveEvidence.sold !== undefined ? liveEvidence.sold : (p.state.soldHighWater || 0);
-  if (liveEvidence.isPoolActive || liveEvidence.isOpenedFn || soldForCheck >= totalCount) {
-    p.state.openedLatched = true;
-    if (!p.state.openedAt) {
-      p.state.openedAt = Date.now();
+    // 4. Latch opened status permanently if any evidence confirms opened
+    const soldForCheck = liveEvidence.sold !== undefined ? liveEvidence.sold : (p.state.soldHighWater || 0);
+    if (liveEvidence.isPoolActive || liveEvidence.isOpenedFn || soldForCheck >= totalCount) {
+      p.state.openedLatched = true;
+      if (!p.state.openedAt) {
+        p.state.openedAt = Date.now();
+      }
     }
-  }
 
-  // Save latest good snapshot on successful on-chain data
-  if (curPrice > 0 || (soldInfo.success && !fetchFailed)) {
-    p.state.lastGood = {
-      price: curPrice > 0 ? curPrice : (p.state.lastGood?.price || 0),
-      sold: soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || p.state.soldHighWater),
-      poolWBNB: isPoolActive ? wbnbNorm : (p.state.lastGood?.poolWBNB || 0),
-      poolToken: isPoolActive ? tokNorm : (p.state.lastGood?.poolToken || 0),
-      symbol: meta.symbol,
-      decimals: meta.decimals,
-      ts: Date.now()
-    };
-    saveProjects();
-  }
+    // 5. Update lastAppliedBlock & save latest good snapshot
+    if (block && (!p.state.lastAppliedBlock || block >= p.state.lastAppliedBlock)) {
+      p.state.lastAppliedBlock = block;
+    }
 
-  // Derive final status with strict priority: openedLatched > live evidence > time table
-  const finalStatus = determineProjectStatus(p, timeStatus, liveEvidence);
-  updateStatusBadges(p, finalStatus.status, finalStatus.badgeClass);
+    if (curPrice > 0 || (soldInfo.success && !fetchFailed)) {
+      p.state.lastGood = {
+        price: curPrice > 0 ? curPrice : (p.state.lastGood?.price || 0),
+        sold: soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || p.state.soldHighWater),
+        poolWBNB: isPoolActive ? wbnbNorm : (p.state.lastGood?.poolWBNB || 0),
+        poolToken: isPoolActive ? tokNorm : (p.state.lastGood?.poolToken || 0),
+        symbol: meta.symbol,
+        decimals: meta.decimals,
+        block: block || p.state.lastAppliedBlock,
+        ts: Date.now()
+      };
+      saveProjects();
+    }
 
-  // Render cards with live data or fallback snapshot
-  if (fetchFailed || (!isPoolActive && curPrice <= 0 && p.state.lastGood?.price > 0)) {
-    const effectiveSold = Math.max(p.state.soldHighWater || 0, p.state.lastGood?.sold || 0, p.manualSold || 0);
-    renderProgressCard(p, effectiveSold, totalCount, true, null);
-    if (p.state.lastGood && p.state.lastGood.price > 0) {
-      renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || meta.symbol, basePriceBnb, true);
+    // 6. Check if user is still on this project before touching DOM
+    if (projects[activeProjectIdx]?.id !== p.id) {
+      return;
+    }
+
+    // 7. Single-cycle ATOMIC RENDER
+    const finalStatus = determineProjectStatus(p, timeStatus, liveEvidence);
+    updateStatusBadges(p, finalStatus.status, finalStatus.badgeClass);
+
+    if (fetchFailed) {
+      // Failed branch: retain last snapshot, update badge to "快照 HH:MM:SS · 本轮读取失败", do not clear/jump to 0
+      const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+      const effectiveSold = Math.max(p.state.soldHighWater || 0, p.state.lastGood?.sold || 0, p.manualSold || 0);
+      renderProgressCard(p, effectiveSold, totalCount, true, "链上读取失败，保留快照");
+      if (p.state.lastGood && p.state.lastGood.price > 0) {
+        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || meta.symbol, basePriceBnb, true);
+      } else {
+        renderPriceCard(p, 0, 0, 0, meta.symbol, basePriceBnb, false);
+      }
+      setSnapshotBadgeState(true, false, true, snapTs);
+
+      // Log POLL failure
+      addLog("POLL", `${p.name} · 读取失败 ${failReason}`, p.id);
     } else {
+      // Success branch: atomically render fresh Progress Card and Price Card
+      const finalSold = soldInfo.success ? soldInfo.sold : Math.max(p.state.soldHighWater || 0, p.manualSold || 0);
+      renderProgressCard(p, finalSold, totalCount, false, soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : (p.manualSold ? "手动录入" : "未能自动探通"));
       renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
+
+      // Remove snapshot badge and clear dimming
+      setSnapshotBadgeState(false, false, false);
+
+      // Log POLL success
+      const poolPriceStr = (isPoolActive && curPrice > 0) ? `${curPrice.toExponential(4)} BNB` : "未开池";
+      const pctStr = ((finalSold / totalCount) * 100).toFixed(1);
+      const blockStr = block ? `#${block}` : (p.state.lastAppliedBlock ? `#${p.state.lastAppliedBlock}` : "—");
+      addLog("POLL", `${p.name} · 块 ${blockStr} · 进度 ${finalSold}/${totalCount}（${pctStr}%）· 池价 ${poolPriceStr} · 延迟 ${cycleLatency}ms · 节点 ${rpcHost}`, p.id);
     }
-  } else {
-    const finalSold = soldInfo.success ? soldInfo.sold : Math.max(p.state.soldHighWater || 0, p.manualSold || 0);
-    renderProgressCard(p, finalSold, totalCount, false, soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : "未能自动探通，需手动录入");
-    renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
+
+    // Manual box sync
+    document.getElementById("manualSoldInput").value = p.manualSold || "";
+
+    // 8. Update Card C Sell Token Balance
+    await refreshSellCardBalance(p, meta);
+
+  } finally {
+    projectRefreshInProgress.delete(p.id);
   }
-
-  // Manual box sync
-  document.getElementById("manualSoldInput").value = p.manualSold || "";
-
-  // 4. Update Card C Sell Token Balance
-  await refreshSellCardBalance(p, meta);
 }
 
 // Sparkline SVG Drawer
@@ -2868,7 +3112,21 @@ async function checkInstantSellEvidence(p) {
   return { triggered: false, reason: "" };
 }
 
+const builtinBotPollState = {}; // projectId -> { lastLogTime, lastLaddersPassed, lastOpened }
+
 async function pollBuiltinBotCycle(b, p) {
+  const now = Date.now();
+  if (!builtinBotPollState[p.id]) {
+    builtinBotPollState[p.id] = {
+      lastLogTime: 0,
+      lastLaddersPassed: -1,
+      lastOpened: !!(p.state && p.state.openedLatched)
+    };
+  }
+  const pollState = builtinBotPollState[p.id];
+  let curPrice = 0;
+  let mult = 0;
+
   // 1. Check Switch B: Instant Sell 100%
   if (b.instantSellEnabled && !b.instantSellTriggered) {
     const ev = await checkInstantSellEvidence(p);
@@ -2897,10 +3155,10 @@ async function pollBuiltinBotCycle(b, p) {
     if (pairAddr) {
       const { wbnbReserve, tokenReserve } = await fetchPairReserves(pairAddr, p.token);
       if (wbnbReserve > 0n && tokenReserve > 0n) {
-        const curPrice = (Number(wbnbReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
+        curPrice = (Number(wbnbReserve) / 1e18) / (Number(tokenReserve) / (10 ** meta.decimals));
         const costPrice = b.costPrice || (p.pricePerShare / p.tokensPerShare);
         if (costPrice > 0) {
-          const mult = curPrice / costPrice;
+          mult = curPrice / costPrice;
           b.curMultiple = mult;
           if (!b.peakMultiple || mult > b.peakMultiple) {
             b.peakMultiple = mult;
@@ -2931,6 +3189,33 @@ async function pollBuiltinBotCycle(b, p) {
         }
       }
     }
+  }
+
+  // 3. Bot Polling Log in Console (Requirement 6)
+  const currentOpened = !!(p.state && p.state.openedLatched);
+  const isOpenedChanged = (currentOpened !== pollState.lastOpened);
+  let isLadderChanged = false;
+  let currentLaddersPassed = -1;
+  if (b.ladderEnabled) {
+    currentLaddersPassed = (b.ladders || []).filter(l => (b.curMultiple || 0) >= l.multiple).length;
+    isLadderChanged = (pollState.lastLaddersPassed !== -1 && currentLaddersPassed !== pollState.lastLaddersPassed);
+  }
+  const isHeartbeat = (pollState.lastLogTime === 0 || now - pollState.lastLogTime >= 30000);
+
+  if (isOpenedChanged || isLadderChanged || isHeartbeat) {
+    pollState.lastLogTime = now;
+    pollState.lastOpened = currentOpened;
+    pollState.lastLaddersPassed = currentLaddersPassed;
+
+    const sold = p.state?.soldHighWater || p.state?.lastGood?.sold || 0;
+    const total = p.totalShares || 10000;
+    const pct = ((sold / total) * 100).toFixed(1);
+    const effectivePrice = curPrice > 0 ? curPrice : (p.state?.lastGood?.price || 0);
+    const priceStr = effectivePrice > 0 ? `${effectivePrice.toExponential(4)} BNB` : "未开池";
+    const multStr = b.curMultiple > 0 ? `${b.curMultiple.toFixed(2)}x` : "—x";
+    const reasonTag = isOpenedChanged ? "开盘证据变更" : (isLadderChanged ? "价格跨越档位线" : "30s轮询心跳");
+
+    addLog("POLL", `[机器人:${p.name}] ${reasonTag} · 进度 ${sold}/${total}（${pct}%）· 池价 ${priceStr} · 倍数 ${multStr}`, p.id);
   }
 
   if (projects[activeProjectIdx]?.id === p.id) {
@@ -3494,17 +3779,15 @@ document.getElementById("btnClearLogs").addEventListener("click", () => {
   document.getElementById("logTerminal").innerHTML = "";
 });
 
-// Log Filter
-document.getElementById("logFilterSelect").addEventListener("change", (e) => {
-  const tag = e.target.value;
+// Log Filters & Show Poll Logs Toggle
+document.getElementById("showPollLogsToggle").addEventListener("change", () => {
   const lines = document.querySelectorAll("#logTerminal .log-line");
-  lines.forEach(l => {
-    if (tag === "ALL" || l.dataset.tag === tag) {
-      l.style.display = "flex";
-    } else {
-      l.style.display = "none";
-    }
-  });
+  lines.forEach(updateLogLineVisibility);
+});
+
+document.getElementById("logFilterSelect").addEventListener("change", () => {
+  const lines = document.querySelectorAll("#logTerminal .log-line");
+  lines.forEach(updateLogLineVisibility);
 });
 
 // Bot Modal
