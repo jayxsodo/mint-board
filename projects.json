@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-11T19:37:59+08:00",
+  "updatedAt": "2026-11-11T19:45:00+08:00",
   "projects": [
     {
       "id": "fairbnb",
@@ -60,21 +60,6 @@
       "endAt": "2026-11-12T19:00:00+08:00",
       "progressFn": "sharesSold",
       "openedFn": "",
-      "sync": true
-    },
-    {
-      "id": "xiuxian",
-      "name": "修仙时代 XIUXIAN",
-      "token": "0xfc12863428311757dff7c6b1035aae86d97be337",
-      "sale": "0x965e6bAdAFff332c9721B714E674e5171c1D3B55",
-      "pricePerShare": 0.003,
-      "tokensPerShare": 30000000,
-      "totalShares": 11000,
-      "taxPct": 0,
-      "startAt": "2026-11-10T22:32:00+08:00",
-      "endAt": "2026-11-13T22:32:00+08:00",
-      "progressFn": "sharesSold",
-      "openedFn": "poolOpened",
       "sync": true
     },
     {
