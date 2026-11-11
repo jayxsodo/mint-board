@@ -1471,11 +1471,77 @@ const RPCS = [
 let currentRpcIdx = 0;
 let lastSuccessfulRpcHost = "bsc-dataseed.bnbchain.org";
 
+// Track health and latency across endpoints for fast-lane routing
+const rpcNodes = RPCS.map(url => {
+  let host = "";
+  try { host = new URL(url).host; } catch (e) { host = url; }
+  return {
+    url,
+    host,
+    latency: 300,
+    consecutiveErrors: 0,
+    lastErrorTime: 0,
+    lastSuccessTime: 0
+  };
+});
+
+function getFastLaneCandidates() {
+  const now = Date.now();
+  return [...rpcNodes].sort((a, b) => {
+    const aCooldown = (a.consecutiveErrors >= 2 && (now - a.lastErrorTime < 30000));
+    const bCooldown = (b.consecutiveErrors >= 2 && (now - b.lastErrorTime < 30000));
+    if (aCooldown !== bCooldown) return aCooldown ? 1 : -1;
+    return (a.latency || 999) - (b.latency || 999);
+  });
+}
+
+async function fastEthCall(to, data, timeoutMs = 2000) {
+  const candidates = getFastLaneCandidates();
+  for (let i = 0; i < Math.min(2, candidates.length); i++) {
+    const node = candidates[i];
+    const start = performance.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(node.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "eth_call",
+          params: [{ to, data }, "latest"]
+        }),
+        signal: controller.signal
+      }).then(r => r.json());
+      clearTimeout(timer);
+
+      if (res && res.result !== undefined && res.result !== null) {
+        const latency = Math.round(performance.now() - start);
+        node.latency = latency;
+        node.consecutiveErrors = 0;
+        node.lastSuccessTime = Date.now();
+        lastSuccessfulRpcHost = node.host;
+        return { result: res.result, latency, rpcHost: node.host };
+      }
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
+    } catch (err) {
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
+    }
+  }
+  return { result: null, latency: 999, rpcHost: null };
+}
+
 async function rpcRequest(method, params = []) {
   const start = performance.now();
   let attempts = 0;
   while (attempts < RPCS.length) {
     const rpcUrl = RPCS[currentRpcIdx];
+    const node = rpcNodes.find(n => n.url === rpcUrl);
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
@@ -1492,10 +1558,20 @@ async function rpcRequest(method, params = []) {
         let host = "";
         try { host = new URL(rpcUrl).host; } catch (e) { host = rpcUrl; }
         lastSuccessfulRpcHost = host;
+        if (node) {
+          node.latency = latency;
+          node.consecutiveErrors = 0;
+          node.lastSuccessTime = Date.now();
+        }
         return { result: res.result, latency, rpcHost: host };
       }
     } catch (e) {
       // rotate RPC
+    }
+    if (node) {
+      node.consecutiveErrors++;
+      node.lastErrorTime = Date.now();
+      node.latency = Math.max(node.latency || 500, 2000) + 500;
     }
     currentRpcIdx = (currentRpcIdx + 1) % RPCS.length;
     attempts++;
@@ -2255,6 +2331,7 @@ function selectProject(idx) {
   renderProjectTabs();
   refreshActiveProject();
   renderBuiltinBotSection();
+  triggerFastLaneImmediate();
 }
 
 // Keyboards 1-9 switch project
@@ -2608,8 +2685,8 @@ async function refreshActiveProject() {
 
       if (isOpenedFn) liveEvidence.isOpenedFn = true;
       if (soldInfo.success) {
-        liveEvidence.sold = soldInfo.sold;
         p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, soldInfo.sold);
+        liveEvidence.sold = p.state.soldHighWater;
       }
 
       if (pairAddr && results[2]) {
@@ -2656,7 +2733,7 @@ async function refreshActiveProject() {
     if (curPrice > 0 || (soldInfo.success && !fetchFailed)) {
       p.state.lastGood = {
         price: curPrice > 0 ? curPrice : (p.state.lastGood?.price || 0),
-        sold: soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || p.state.soldHighWater),
+        sold: Math.max(p.state.soldHighWater || 0, soldInfo.success ? soldInfo.sold : (p.state.lastGood?.sold || 0)),
         poolWBNB: isPoolActive ? wbnbNorm : (p.state.lastGood?.poolWBNB || 0),
         poolToken: isPoolActive ? tokNorm : (p.state.lastGood?.poolToken || 0),
         symbol: meta.symbol,
@@ -2692,7 +2769,7 @@ async function refreshActiveProject() {
       addLog("POLL", `${p.name} · 读取失败 ${failReason}`, p.id);
     } else {
       // Success branch: atomically render fresh Progress Card and Price Card
-      const finalSold = soldInfo.success ? soldInfo.sold : Math.max(p.state.soldHighWater || 0, p.manualSold || 0);
+      const finalSold = Math.max(p.state.soldHighWater || 0, soldInfo.success ? soldInfo.sold : 0, p.manualSold || 0);
       renderProgressCard(p, finalSold, totalCount, false, soldInfo.success ? `链上成功读取 [${soldInfo.source}]` : (p.manualSold ? "手动录入" : "未能自动探通"));
       renderPriceCard(p, curPrice, wbnbNorm, tokNorm, meta.symbol, basePriceBnb, false);
 
@@ -2714,6 +2791,156 @@ async function refreshActiveProject() {
 
   } finally {
     projectRefreshInProgress.delete(p.id);
+  }
+}
+
+// ==========================================
+// 6.5 FAST LANE PROGRESS POLLING ENGINE (v6)
+// ==========================================
+let isFastLaneInFlight = false;
+let fastLaneTimer = null;
+
+function checkIsInSaleWindow(p) {
+  if (!p) return false;
+  if (p.state && p.state.openedLatched) return false;
+  const totalCount = p.totalShares || 10000;
+  if ((p.state?.soldHighWater || 0) >= totalCount) return false;
+
+  const now = Date.now();
+  const launchTs = parseTimestamp(p.startAt || p.launchTime);
+  const endTs = parseTimestamp(p.endAt || p.endTime);
+
+  if (launchTs && now < launchTs) return false;
+  if (endTs && now >= endTs) return false;
+  if (!launchTs) return false;
+
+  return true;
+}
+
+async function pollFastLane() {
+  if (document.hidden) return;
+  const p = projects[activeProjectIdx];
+  if (!p) return;
+
+  const contractAddr = p.sale || p.presale;
+  if (!contractAddr) return;
+
+  // In-flight guard: skip if previous round hasn't returned
+  if (isFastLaneInFlight) return;
+  isFastLaneInFlight = true;
+
+  try {
+    const fn = normalizeFn(p.progressFn || "sold()");
+    const selector = getSelector(fn);
+
+    const needCheckOpened = !p.state?.openedLatched && !!(p.openedFn && p.openedFn.trim());
+    const tasks = [fastEthCall(contractAddr, selector)];
+    if (needCheckOpened) {
+      tasks.push(fastEthCall(contractAddr, getSelector(normalizeFn(p.openedFn))));
+    }
+
+    const results = await Promise.all(tasks);
+    const progRes = results[0];
+    const openRes = needCheckOpened ? results[1] : null;
+
+    // Discard if user switched project during in-flight call
+    if (projects[activeProjectIdx]?.id !== p.id) return;
+
+    let hasOpenedEvidence = false;
+    if (openRes && openRes.result && openRes.result !== "0x") {
+      try {
+        const oVal = BigInt(openRes.result);
+        if (oVal > 0n) {
+          hasOpenedEvidence = true;
+        }
+      } catch (e) {}
+    }
+
+    if (progRes && progRes.result && progRes.result !== "0x") {
+      try {
+        const val = BigInt(progRes.result);
+        const readSold = Number(val);
+        const totalCount = p.totalShares || 10000;
+        const currentHighWater = (p.state && p.state.soldHighWater) || 0;
+        const prevSold = Math.max(currentHighWater, p.state?.lastGood?.sold || 0, p.manualSold || 0);
+
+        // Anti-rollback: only accept if readSold >= prevSold
+        if (readSold >= prevSold) {
+          const soldChanged = (readSold !== prevSold);
+
+          if (!p.state) p.state = {};
+          p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, readSold);
+          if (p.state.lastGood) {
+            p.state.lastGood.sold = readSold;
+            p.state.lastGood.ts = Date.now();
+          }
+
+          // Update progress card DOM directly (numbers, bar, status text)
+          renderProgressCard(p, readSold, totalCount, false, `快速通道 [${fn}]`);
+
+          // Update status badges for current project & tab
+          const now = Date.now();
+          const launchTs = parseTimestamp(p.startAt || p.launchTime);
+          const timeStatus = (launchTs && now >= launchTs) ? "已开始" : "未开始";
+          const statusInfo = determineProjectStatus(p, timeStatus, {
+            sold: readSold,
+            isOpenedFn: hasOpenedEvidence
+          });
+          updateStatusBadges(p, statusInfo.status, statusInfo.badgeClass);
+
+          // Console log: ONLY when progress numerical value changes
+          if (soldChanged) {
+            const pctStr = ((readSold / totalCount) * 100).toFixed(1);
+            addLog("POLL", `[进度快读] ${p.name} · 进度 ${readSold}/${totalCount}（${pctStr}%）· 延迟 ${progRes.latency}ms · 节点 ${progRes.rpcHost}`, p.id);
+            saveProjects();
+          }
+
+          // Trigger full refresh immediately if sold out or opened
+          if (readSold >= totalCount || hasOpenedEvidence) {
+            p.state.openedLatched = true;
+            if (!p.state.openedAt) p.state.openedAt = Date.now();
+            saveProjects();
+            refreshActiveProject();
+          }
+        }
+      } catch (e) {
+        console.warn("Fast lane decode error:", e);
+      }
+    } else if (hasOpenedEvidence) {
+      p.state.openedLatched = true;
+      if (!p.state.openedAt) p.state.openedAt = Date.now();
+      saveProjects();
+      refreshActiveProject();
+    }
+  } finally {
+    isFastLaneInFlight = false;
+  }
+}
+
+function scheduleNextFastLaneTick() {
+  if (fastLaneTimer) clearTimeout(fastLaneTimer);
+  const p = projects[activeProjectIdx];
+  const inSale = checkIsInSaleWindow(p);
+  const delay = inSale ? 1000 : 3000;
+  fastLaneTimer = setTimeout(async () => {
+    try {
+      await pollFastLane();
+    } finally {
+      scheduleNextFastLaneTick();
+    }
+  }, delay);
+}
+
+function triggerFastLaneImmediate() {
+  if (fastLaneTimer) clearTimeout(fastLaneTimer);
+  if (!isFastLaneInFlight) {
+    pollFastLane().finally(() => {
+      scheduleNextFastLaneTick();
+    });
+  } else {
+    fastLaneTimer = setTimeout(() => {
+      triggerFastLaneImmediate();
+    }, 100);
   }
 }
 
@@ -3225,7 +3452,12 @@ async function pollBuiltinBotCycle(b, p) {
     const multStr = b.curMultiple > 0 ? `${b.curMultiple.toFixed(2)}x` : "—x";
     const reasonTag = isOpenedChanged ? "开盘证据变更" : (isLadderChanged ? "价格跨越档位线" : "30s轮询心跳");
 
-    addLog("POLL", `[机器人:${p.name}] ${reasonTag} · 进度 ${sold}/${total}（${pct}%）· 池价 ${priceStr} · 倍数 ${multStr}`, p.id);
+    // v6: Non-selected projects bot heartbeat does NOT enter console.
+    // Selected project bot heartbeat remains visible.
+    const isCurrentProject = (projects[activeProjectIdx]?.id === p.id);
+    if (isCurrentProject) {
+      addLog("POLL", `[机器人:${p.name}] ${reasonTag} · 进度 ${sold}/${total}（${pct}%）· 池价 ${priceStr} · 倍数 ${multStr}`, p.id);
+    }
   }
 
   if (projects[activeProjectIdx]?.id === p.id) {
@@ -4034,6 +4266,7 @@ document.getElementById("btnRefresh").addEventListener("click", async () => {
   await syncProjectsManifest();
   await refreshTopBar();
   await refreshActiveProject();
+  triggerFastLaneImmediate();
 });
 
 // ==========================================
@@ -4045,6 +4278,7 @@ renderBotTable();
 refreshTopBar();
 refreshActiveProject();
 renderBuiltinBotSection();
+scheduleNextFastLaneTick();
 
 // Restore running builtin bots
 projects.forEach(p => {
@@ -4082,6 +4316,7 @@ document.addEventListener("visibilitychange", () => {
     refreshTopBar();
     refreshActiveProject();
     syncProjectsManifest();
+    triggerFastLaneImmediate();
   }
 });
 </script>
