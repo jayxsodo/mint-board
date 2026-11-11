@@ -208,10 +208,67 @@
   }
   .project-tab.active {
     background: #142033;
-    border-color: var(--blue);
-    color: var(--blue);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.12);
+    border: 1.5px solid var(--blue);
+    color: #ffffff;
+    box-shadow: 0 0 0 1.5px var(--blue), 0 0 14px rgba(56, 189, 248, 0.28);
+    font-weight: 700;
   }
+
+  /* v7: Project Grid Tier Colors (Green <20%, Amber 20-50%, Red >=50%, Unopened Gray) */
+  .project-tab.tier-green {
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    color: #e6fcf5;
+  }
+  .project-tab.tier-green:hover {
+    background: rgba(16, 185, 129, 0.20);
+    border-color: rgba(16, 185, 129, 0.70);
+    color: #ffffff;
+  }
+  .project-tab.tier-green.active {
+    background: rgba(16, 185, 129, 0.22);
+    border: 1.5px solid #34d399;
+    color: #ffffff;
+    box-shadow: 0 0 0 1.5px #10b981, 0 0 14px rgba(16, 185, 129, 0.40);
+    font-weight: 700;
+  }
+
+  .project-tab.tier-amber {
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #fef3c7;
+  }
+  .project-tab.tier-amber:hover {
+    background: rgba(245, 158, 11, 0.20);
+    border-color: rgba(245, 158, 11, 0.70);
+    color: #ffffff;
+  }
+  .project-tab.tier-amber.active {
+    background: rgba(245, 158, 11, 0.22);
+    border: 1.5px solid #fbbf24;
+    color: #ffffff;
+    box-shadow: 0 0 0 1.5px #f59e0b, 0 0 14px rgba(245, 158, 11, 0.40);
+    font-weight: 700;
+  }
+
+  .project-tab.tier-red {
+    background: rgba(244, 63, 94, 0.14);
+    border: 1px solid rgba(244, 63, 94, 0.45);
+    color: #ffe4e6;
+  }
+  .project-tab.tier-red:hover {
+    background: rgba(244, 63, 94, 0.20);
+    border-color: rgba(244, 63, 94, 0.70);
+    color: #ffffff;
+  }
+  .project-tab.tier-red.active {
+    background: rgba(244, 63, 94, 0.22);
+    border: 1.5px solid #fb7185;
+    color: #ffffff;
+    box-shadow: 0 0 0 1.5px #f43f5e, 0 0 14px rgba(244, 63, 94, 0.40);
+    font-weight: 700;
+  }
+
   .project-tab .tab-name,
   .project-tab > span:not(.kbd-key):not(.tab-badge) {
     flex: 1 1 auto;
@@ -241,6 +298,9 @@
   }
   .badge-unopened { background: rgba(127, 139, 164, 0.15); color: #94a3b8; border: 1px solid #475569; }
   .badge-selling { background: var(--amber-glow); color: #fbbf24; border: 1px solid var(--amber); }
+  .badge-selling.badge-selling-green { background: var(--green-glow); color: #6ee7b7; border-color: var(--green); }
+  .badge-selling.badge-selling-amber { background: var(--amber-glow); color: #fbbf24; border-color: var(--amber); }
+  .badge-selling.badge-selling-red { background: var(--red-glow); color: #fda4af; border-color: var(--red); }
   .badge-opened { background: var(--green-glow); color: #34d399; border: 1px solid var(--green); }
   .badge-soldout { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid var(--purple); }
   .badge-failed { background: var(--red-glow); color: #f87171; border: 1px solid var(--red); }
@@ -2277,13 +2337,110 @@ function determineProjectStatus(p, timeStatus, liveEvidence = {}) {
     return { status: "已售罄", badgeClass: "badge-soldout" };
   }
 
-  // 4. In Sale Schedule
+  // 4. In Sale Schedule (v7: pill color follows tier: green <20%, amber 20-50%, red >=50%)
   if (timeStatus === "已开始") {
-    return { status: "发售中", badgeClass: "badge-selling" };
+    const pct = totalCount > 0 ? (currentSold / totalCount) * 100 : 0;
+    let badgeTierMod = "badge-selling-green";
+    if (pct >= 50) {
+      badgeTierMod = "badge-selling-red";
+    } else if (pct >= 20) {
+      badgeTierMod = "badge-selling-amber";
+    }
+    return { status: "发售中", badgeClass: `badge-selling ${badgeTierMod}` };
   }
 
   // 5. Default: Not Started
   return { status: "未开盘", badgeClass: "badge-unopened" };
+}
+
+// v7: Calculate project progress tier (<20% green, 20-50% amber, >=50% red, unopened gray)
+function getProjectTierInfo(p, overrideSold = null) {
+  if (!p) {
+    return {
+      tier: "unopened",
+      tabTierClass: "",
+      badgeClass: "badge-unopened",
+      statusText: "未开盘",
+      pct: 0
+    };
+  }
+
+  const launchTs = parseTimestamp(p.startAt || p.launchTime);
+  const now = Date.now();
+  const timeStatus = (launchTs && now >= launchTs) ? "已开始" : "未开始";
+
+  const totalCount = p.totalShares || 10000;
+  const highWater = (p.state && p.state.soldHighWater) || 0;
+  const effectiveSold = Math.max(
+    highWater,
+    overrideSold !== null ? overrideSold : 0,
+    p.manualSold || 0,
+    p.state?.lastGood?.sold || 0
+  );
+
+  const statusInfo = determineProjectStatus(p, timeStatus, { sold: effectiveSold });
+  const statusText = statusInfo.status;
+
+  // Unopened / not started: maintain gray, no color
+  if (statusText === "未开盘") {
+    return {
+      tier: "unopened",
+      tabTierClass: "",
+      badgeClass: "badge-unopened",
+      statusText,
+      pct: 0
+    };
+  }
+
+  // Already started / opened / sold out: calculate tier based on sold / totalShares * 100
+  const pct = totalCount > 0 ? (effectiveSold / totalCount) * 100 : 0;
+  let tier = "green";
+  let tabTierClass = "tier-green";
+
+  if (pct >= 50) {
+    tier = "red";
+    tabTierClass = "tier-red";
+  } else if (pct >= 20) {
+    tier = "amber";
+    tabTierClass = "tier-amber";
+  } else {
+    tier = "green";
+    tabTierClass = "tier-green";
+  }
+
+  return {
+    tier,
+    tabTierClass,
+    badgeClass: statusInfo.badgeClass,
+    statusText,
+    pct
+  };
+}
+
+function applyProjectTabTier(p, idx = -1) {
+  if (!p) return;
+  const tab = document.getElementById(`projTab_${p.id}`);
+  if (!tab) return;
+
+  const currentIdx = idx >= 0 ? idx : projects.findIndex(proj => proj.id === p.id);
+  const isActive = (currentIdx === activeProjectIdx);
+  const tierInfo = getProjectTierInfo(p);
+  const targetClass = `project-tab ${isActive ? "active" : ""} ${tierInfo.tabTierClass}`.trim();
+
+  if (tab.className !== targetClass) {
+    tab.className = targetClass;
+  }
+
+  const tabBadge = document.getElementById(`tabBadge_${p.id}`);
+  if (tabBadge) {
+    const badgeClass = `tab-badge ${tierInfo.badgeClass}`;
+    if (tabBadge.className !== badgeClass) {
+      tabBadge.className = badgeClass;
+    }
+    if (tabBadge.textContent !== tierInfo.statusText) {
+      tabBadge.textContent = tierInfo.statusText;
+    }
+  }
 }
 
 function updateStatusBadges(p, statusBadgeText, badgeClass) {
@@ -2298,6 +2455,7 @@ function updateStatusBadges(p, statusBadgeText, badgeClass) {
     tabBadge.textContent = statusBadgeText;
     tabBadge.className = `tab-badge ${badgeClass}`;
   }
+  applyProjectTabTier(p);
 }
 
 function renderProjectTabs() {
@@ -2305,20 +2463,20 @@ function renderProjectTabs() {
   container.innerHTML = "";
   projects.forEach((p, idx) => {
     const tab = document.createElement("button");
-    tab.className = `project-tab ${idx === activeProjectIdx ? "active" : ""}`;
+    const tierInfo = getProjectTierInfo(p);
+    const isActive = (idx === activeProjectIdx);
+    tab.className = `project-tab ${isActive ? "active" : ""} ${tierInfo.tabTierClass}`.trim();
+    tab.id = `projTab_${p.id}`;
     tab.onclick = () => selectProject(idx);
 
-    const launchTs = parseTimestamp(p.startAt || p.launchTime);
-    const timeStatus = (launchTs && Date.now() >= launchTs) ? "已开始" : "未开始";
-    const statusInfo = determineProjectStatus(p, timeStatus);
-    p.statusBadge = statusInfo.status;
+    p.statusBadge = tierInfo.statusText;
 
     const sourceTag = p.source === "manual" ? `<span style="font-size:9.5px; opacity:0.6; margin-left:2px" title="本地手动添加">自</span>` : "";
 
     tab.innerHTML = `
       <span class="kbd-key">${idx + 1}</span>
       <span class="tab-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}${sourceTag}</span>
-      <span class="tab-badge ${statusInfo.badgeClass}" id="tabBadge_${p.id}">${statusInfo.status}</span>
+      <span class="tab-badge ${tierInfo.badgeClass}" id="tabBadge_${p.id}">${tierInfo.statusText}</span>
     `;
     container.appendChild(tab);
   });
@@ -2392,24 +2550,52 @@ function setSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null) {
 // Render Card A: Presale Progress
 function renderProgressCard(p, soldCount, totalCount, isSnapshot, statusSourceText) {
   const pct = Math.min(Math.max((soldCount / totalCount) * 100, 0), 100);
-  document.getElementById("sharesSoldNum").textContent = soldCount.toLocaleString();
-  document.getElementById("totalSharesNum").textContent = totalCount.toLocaleString();
-  document.getElementById("sharesSoldPct").textContent = `${pct.toFixed(1)}%`;
-  document.getElementById("progressBarFill").style.width = `${pct}%`;
-  document.getElementById("sharesRemaining").textContent = Math.max(totalCount - soldCount, 0).toLocaleString();
+  const soldEl = document.getElementById("sharesSoldNum");
+  const totalEl = document.getElementById("totalSharesNum");
+  const pctEl = document.getElementById("sharesSoldPct");
+  const barEl = document.getElementById("progressBarFill");
+  const remEl = document.getElementById("sharesRemaining");
+
+  if (soldEl) soldEl.textContent = soldCount.toLocaleString();
+  if (totalEl) totalEl.textContent = totalCount.toLocaleString();
+  if (pctEl) pctEl.textContent = `${pct.toFixed(1)}%`;
+  if (barEl) barEl.style.width = `${pct}%`;
+  if (remEl) remEl.textContent = Math.max(totalCount - soldCount, 0).toLocaleString();
+
+  // v7: Sync Card A progress bar fill & percentage text color with tier (green <20%, amber 20-50%, red >=50%, unopened existing)
+  const tierInfo = getProjectTierInfo(p, soldCount);
+  if (pctEl && barEl) {
+    if (tierInfo.tier === "green") {
+      pctEl.style.color = "var(--green)";
+      barEl.style.background = "linear-gradient(90deg, #059669, #10b981)";
+    } else if (tierInfo.tier === "amber") {
+      pctEl.style.color = "var(--amber)";
+      barEl.style.background = "linear-gradient(90deg, #d97706, #f59e0b)";
+    } else if (tierInfo.tier === "red") {
+      pctEl.style.color = "var(--red)";
+      barEl.style.background = "linear-gradient(90deg, #e11d48, #f43f5e)";
+    } else {
+      // Unopened: retain existing styling
+      pctEl.style.color = "var(--amber)";
+      barEl.style.background = "linear-gradient(90deg, #f59e0b, #10b981)";
+    }
+  }
   
   const fnLabel = p.progressFn || "视图函数";
   const saleAddr = p.sale || p.presale || "";
-  document.getElementById("presaleReadSource").textContent = saleAddr ? `${saleAddr.slice(0, 10)}...${saleAddr.slice(-8)} · [${fnLabel}]` : "—";
+  const srcEl = document.getElementById("presaleReadSource");
+  if (srcEl) srcEl.textContent = saleAddr ? `${saleAddr.slice(0, 10)}...${saleAddr.slice(-8)} · [${fnLabel}]` : "—";
   
   const statusEl = document.getElementById("progressReadStatusText");
-  if (isSnapshot) {
-    const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
-    statusEl.textContent = snapTs ? `暂时读不到链上，显示上次数据 (数据于 ${snapTs})` : "暂时读不到链上，显示高水位数据";
-    statusEl.style.color = "var(--amber)";
-  } else {
-    statusEl.textContent = statusSourceText || "链上成功读取";
-    statusEl.style.color = "var(--text-dim)";
+  if (statusEl) {
+    if (isSnapshot) {
+      const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+      statusEl.textContent = snapTs ? `暂时读不到链上，显示上次数据 (数据于 ${snapTs})` : "暂时读不到链上，显示高水位数据";
+      statusEl.style.color = "var(--amber)";
+    } else {
+      statusEl.textContent = statusSourceText || "链上成功读取";
+      statusEl.style.color = "var(--text-dim)";
+    }
   }
 }
 
@@ -2942,6 +3128,85 @@ function triggerFastLaneImmediate() {
       triggerFastLaneImmediate();
     }, 100);
   }
+}
+
+// ==========================================
+// 6.6 LIGHTWEIGHT PROGRESS PATROL ENGINE (v7)
+// ==========================================
+let isPatrolInFlight = false;
+let patrolTimer = null;
+const PATROL_INTERVAL_MS = 15000;
+
+async function runProgressPatrolRound() {
+  if (document.hidden) return;
+  if (isPatrolInFlight) return;
+  isPatrolInFlight = true;
+
+  try {
+    for (let i = 0; i < projects.length; i++) {
+      if (document.hidden) break;
+      const p = projects[i];
+      if (!p) continue;
+
+      // Active project is driven by v6 fast lane (1s), its tier follows fast lane readings.
+      const isActive = (i === activeProjectIdx);
+      if (isActive) {
+        applyProjectTabTier(p, i);
+        continue;
+      }
+
+      // Non-active project: single progressFn eth_call (错峰、带 in-flight 守卫、失败保留上次档位)
+      const contractAddr = p.sale || p.presale;
+      if (contractAddr) {
+        try {
+          const fn = normalizeFn(p.progressFn || "sold()");
+          const selector = getSelector(fn);
+          const res = await fastEthCall(contractAddr, selector, 2500);
+          if (res && res.result && res.result !== "0x") {
+            try {
+              const val = BigInt(res.result);
+              const readSold = Number(val);
+              const totalCount = p.totalShares || 10000;
+              const currentHighWater = (p.state && p.state.soldHighWater) || 0;
+              const prevSold = Math.max(currentHighWater, p.state?.lastGood?.sold || 0, p.manualSold || 0);
+
+              // Anti-rollback: only accept if readSold >= prevSold
+              if (readSold >= prevSold) {
+                if (!p.state) p.state = {};
+                p.state.soldHighWater = Math.max(p.state.soldHighWater || 0, readSold);
+                if (p.state.lastGood) {
+                  p.state.lastGood.sold = readSold;
+                }
+              }
+            } catch (err) {}
+          }
+        } catch (err) {
+          // Failure guard: keep last tier without jumping
+        }
+      }
+
+      // Update tab tier styling for this project
+      applyProjectTabTier(p, i);
+
+      // Stagger next call by 120ms to avoid burst calls
+      if (i < projects.length - 1) {
+        await new Promise(r => setTimeout(r, 120));
+      }
+    }
+  } finally {
+    isPatrolInFlight = false;
+  }
+}
+
+function scheduleNextPatrolTick(delay = PATROL_INTERVAL_MS) {
+  if (patrolTimer) clearTimeout(patrolTimer);
+  patrolTimer = setTimeout(async () => {
+    try {
+      await runProgressPatrolRound();
+    } finally {
+      scheduleNextPatrolTick(PATROL_INTERVAL_MS);
+    }
+  }, delay);
 }
 
 // Sparkline SVG Drawer
@@ -4267,6 +4532,7 @@ document.getElementById("btnRefresh").addEventListener("click", async () => {
   await refreshTopBar();
   await refreshActiveProject();
   triggerFastLaneImmediate();
+  scheduleNextPatrolTick(1000);
 });
 
 // ==========================================
@@ -4279,6 +4545,7 @@ refreshTopBar();
 refreshActiveProject();
 renderBuiltinBotSection();
 scheduleNextFastLaneTick();
+scheduleNextPatrolTick(1500);
 
 // Restore running builtin bots
 projects.forEach(p => {
@@ -4317,6 +4584,7 @@ document.addEventListener("visibilitychange", () => {
     refreshActiveProject();
     syncProjectsManifest();
     triggerFastLaneImmediate();
+    scheduleNextPatrolTick(1000);
   }
 });
 </script>
