@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-12T19:02:26+08:00",
+    "updatedAt": "2026-11-12T20:58:11+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -137,6 +137,21 @@
             "endAt": "2026-11-15T18:00:00+08:00",
             "progressFn": "seatsTaken",
             "openedFn": "openedAt",
+            "sync": true
+        },
+        {
+            "id": "soar",
+            "name": "Soar Agent",
+            "token": "0x0eACCFC9f636d15A84855aab1a64D6Ec88888888",
+            "sale": "0x0eACCFC9f636d15A84855aab1a64D6Ec88888888",
+            "pricePerShare": 0.003,
+            "tokensPerShare": 80000,
+            "totalShares": 10000,
+            "taxPct": 3,
+            "startAt": "2026-11-11T01:41:06+08:00",
+            "endAt": "2026-11-25T01:41:06+08:00",
+            "progressFn": "totalSold",
+            "openedFn": "poolOpened",
             "sync": true
         }
     ]
