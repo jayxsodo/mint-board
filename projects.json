@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-12T01:32:48+08:00",
+    "updatedAt": "2026-11-12T08:27:38+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -73,21 +73,6 @@
             "taxPct": 2,
             "startAt": "2026-11-11T19:00:00+08:00",
             "endAt": "2026-11-14T19:00:00+08:00",
-            "progressFn": "totalMinted",
-            "openedFn": "opened",
-            "sync": true
-        },
-        {
-            "id": "broccoli2",
-            "name": "西兰花 Broccoli 重启",
-            "token": "0xfCA48E7b799D5155384CB3E9797dbBDB12FCEE5B",
-            "sale": "0xfCA48E7b799D5155384CB3E9797dbBDB12FCEE5B",
-            "pricePerShare": 0.002,
-            "tokensPerShare": 12000000,
-            "totalShares": 25000,
-            "taxPct": 2,
-            "startAt": "2026-11-11T23:00:00+08:00",
-            "endAt": "2026-11-12T05:00:00+08:00",
             "progressFn": "totalMinted",
             "openedFn": "opened",
             "sync": true
