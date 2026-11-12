@@ -1683,30 +1683,64 @@ function getFallbackCandidates() {
   });
 }
 
-// v11 FastLane: Single eth_call with sticky relay master (relay: 4000ms, public fallback: 2000ms)
-// v11: Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
+// Helper: Fetch with hard timeout & AbortController (never leaves hanging promise or stream)
+function fetchWithHardTimeout(url, options, timeoutMs, timeoutMsg = "Request timeout") {
+  const controller = new AbortController();
+  let timer = null;
+  const fetchPromise = (async () => {
+    const r = await fetch(url, { ...options, signal: controller.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  })();
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try { controller.abort(); } catch (e) {}
+      reject(new Error(`${timeoutMsg} (${timeoutMs}ms)`));
+    }, timeoutMs);
+  });
+  return Promise.race([fetchPromise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function withHardTimeout(promise, ms, fallbackVal = null) {
+  let timer = null;
+  const timeoutPromise = new Promise(resolve => {
+    timer = setTimeout(() => {
+      resolve(typeof fallbackVal === "function" ? fallbackVal() : fallbackVal);
+    }, ms);
+  });
+  return Promise.race([
+    promise.then(
+      res => { if (timer) clearTimeout(timer); return res; },
+      err => { if (timer) clearTimeout(timer); return typeof fallbackVal === "function" ? fallbackVal() : fallbackVal; }
+    ),
+    timeoutPromise
+  ]);
+}
+
+// v13 FastLane: Single eth_call with sticky relay master (relay: 4000ms, public fallback: 2000ms)
+// Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
 async function fastEthCall(to, data, timeoutMs = 2000) {
-  // 1. Sticky Primary: Always try relay first with 4000ms timeout
+  // 1. Sticky Primary: Always try relay first with Math.max(timeoutMs, 4000) timeout
   const relayTimeout = Math.max(timeoutMs, 4000);
   const start = performance.now();
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), relayTimeout);
-    const res = await fetch(relayNode.url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method: "eth_call",
-        params: [{ to, data }, "latest"]
-      }),
-      signal: controller.signal
-    }).then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    });
-    clearTimeout(timer);
+    const res = await fetchWithHardTimeout(
+      relayNode.url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "eth_call",
+          params: [{ to, data }, "latest"]
+        })
+      },
+      relayTimeout,
+      "Relay fastEthCall timeout"
+    );
 
     if (res && typeof res === "object") {
       const latency = Math.round(performance.now() - start);
@@ -1718,7 +1752,7 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
         return { result: res.result, latency, rpcHost: relayNode.host, error: null };
       }
       if (res.error) {
-        // v11: Revert is a definitive answer, not node failure!
+        // Revert is a definitive answer, not node failure!
         relayNode.latency = latency;
         relayNode.consecutiveErrors = 0;
         relayNode.lastSuccessTime = Date.now();
@@ -1741,23 +1775,21 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
     const node = fallbacks[i];
     const fbStart = performance.now();
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const res = await fetch(node.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: Date.now(),
-          method: "eth_call",
-          params: [{ to, data }, "latest"]
-        }),
-        signal: controller.signal
-      }).then(r => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      });
-      clearTimeout(timer);
+      const res = await fetchWithHardTimeout(
+        node.url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: Date.now(),
+            method: "eth_call",
+            params: [{ to, data }, "latest"]
+          })
+        },
+        timeoutMs,
+        "Fallback fastEthCall timeout"
+      );
 
       if (res && typeof res === "object") {
         const latency = Math.round(performance.now() - fbStart);
@@ -1769,7 +1801,7 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
           return { result: res.result, latency, rpcHost: node.host, error: null };
         }
         if (res.error) {
-          // v11: Revert is a definitive answer, not node failure!
+          // Revert is a definitive answer, not node failure!
           node.latency = latency;
           node.consecutiveErrors = 0;
           node.lastSuccessTime = Date.now();
@@ -1789,24 +1821,22 @@ async function fastEthCall(to, data, timeoutMs = 2000) {
   return { result: null, error: new Error("All RPC nodes failed"), latency: 999, rpcHost: null };
 }
 
-// v11 rpcRequest: Single RPC call with sticky relay master (relay: 6000ms, public fallback: 4000ms)
-// v11: Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
+// v13 rpcRequest: Single RPC call with sticky relay master (relay: 6000ms, public fallback: 4000ms)
+// Revert is an answer, not node failure. If node returns valid JSON-RPC with error, return immediately.
 async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTimeoutMs = 4000) {
-  // 1. Sticky Primary: Always try relay first with 6000ms timeout
+  // 1. Sticky Primary: Always try relay first with relayTimeoutMs timeout
   const start = performance.now();
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), relayTimeoutMs);
-    const res = await fetch(relayNode.url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
-      signal: controller.signal
-    }).then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    });
-    clearTimeout(timeout);
+    const res = await fetchWithHardTimeout(
+      relayNode.url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params })
+      },
+      relayTimeoutMs,
+      "Relay RPC timeout"
+    );
 
     if (res && typeof res === "object") {
       const latency = Math.round(performance.now() - start);
@@ -1818,7 +1848,7 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
         return { result: res.result, latency, rpcHost: relayNode.host, error: null };
       }
       if (res.error) {
-        // v11: Revert is an answer, not node failure!
+        // Revert is an answer, not node failure!
         relayNode.latency = latency;
         relayNode.consecutiveErrors = 0;
         relayNode.lastSuccessTime = Date.now();
@@ -1837,22 +1867,20 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
 
   // 2. Fallback: Public nodes in latency order (relay failed)
   const fallbacks = getFallbackCandidates();
-  for (let i = 0; i < fallbacks.length; i++) {
+  for (let i = 0; i < Math.min(3, fallbacks.length); i++) {
     const node = fallbacks[i];
     const fbStart = performance.now();
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), fallbackTimeoutMs);
-      const res = await fetch(node.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
-        signal: controller.signal
-      }).then(r => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      });
-      clearTimeout(timeout);
+      const res = await fetchWithHardTimeout(
+        node.url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params })
+        },
+        fallbackTimeoutMs,
+        "Fallback RPC timeout"
+      );
 
       if (res && typeof res === "object") {
         const latency = Math.round(performance.now() - fbStart);
@@ -1864,7 +1892,7 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
           return { result: res.result, latency, rpcHost: node.host, error: null };
         }
         if (res.error) {
-          // v11: Revert is an answer, not node failure!
+          // Revert is an answer, not node failure!
           node.latency = latency;
           node.consecutiveErrors = 0;
           node.lastSuccessTime = Date.now();
@@ -1884,7 +1912,7 @@ async function rpcRequest(method, params = [], relayTimeoutMs = 6000, fallbackTi
   return { result: null, error: new Error("All RPC nodes failed"), latency: 999, rpcHost: null };
 }
 
-// v10 rpcBatchRequest: Package multiple JSON-RPC calls into a single HTTP POST request.
+// v13 rpcBatchRequest: Package multiple JSON-RPC calls into a single HTTP POST request.
 // Always tries relay first. Matches responses by id. Returns { success, results, errors, latency, rpcHost }.
 async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs = 4000) {
   if (!calls || calls.length === 0) {
@@ -1898,21 +1926,19 @@ async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs =
     params: c.params || []
   }));
 
-  // 1. Sticky Primary: Always try relay first with 6000ms timeout
+  // 1. Sticky Primary: Always try relay first with relayTimeoutMs timeout
   const start = performance.now();
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), relayTimeoutMs);
-    const res = await fetch(relayNode.url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    }).then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    });
-    clearTimeout(timer);
+    const res = await fetchWithHardTimeout(
+      relayNode.url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      },
+      relayTimeoutMs,
+      "Relay batch timeout"
+    );
 
     if (Array.isArray(res) && res.length > 0) {
       const latency = Math.round(performance.now() - start);
@@ -1942,22 +1968,20 @@ async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs =
 
   // 2. Fallback: Try public nodes in latency order for batch support
   const fallbacks = getFallbackCandidates();
-  for (let i = 0; i < fallbacks.length; i++) {
+  for (let i = 0; i < Math.min(3, fallbacks.length); i++) {
     const node = fallbacks[i];
     const fbStart = performance.now();
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), fallbackTimeoutMs);
-      const res = await fetch(node.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      }).then(r => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      });
-      clearTimeout(timer);
+      const res = await fetchWithHardTimeout(
+        node.url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        },
+        fallbackTimeoutMs,
+        "Fallback batch timeout"
+      );
 
       if (Array.isArray(res) && res.length > 0) {
         const latency = Math.round(performance.now() - fbStart);
@@ -1989,19 +2013,42 @@ async function rpcBatchRequest(calls, relayTimeoutMs = 6000, fallbackTimeoutMs =
   return { success: false, results: {}, errors: {}, latency: 999, rpcHost: null };
 }
 
-async function ethCall(to, data) {
-  const { result, error, latency, rpcHost } = await rpcRequest("eth_call", [{ to, data }, "latest"]);
-  return { result, error, latency, rpcHost };
+async function ethCall(to, data, timeoutMs = 4500) {
+  try {
+    return await withHardTimeout(
+      rpcRequest("eth_call", [{ to, data }, "latest"], Math.min(timeoutMs, 4000), Math.min(timeoutMs, 2500)),
+      timeoutMs,
+      { result: null, error: new Error("ethCall timeout"), latency: timeoutMs, rpcHost: null }
+    );
+  } catch (e) {
+    return { result: null, error: e, latency: timeoutMs, rpcHost: null };
+  }
 }
 
-async function ethGetBalance(addr) {
-  const { result } = await rpcRequest("eth_getBalance", [addr, "latest"]);
-  return result ? BigInt(result) : 0n;
+async function ethGetBalance(addr, timeoutMs = 4000) {
+  try {
+    const res = await withHardTimeout(
+      rpcRequest("eth_getBalance", [addr, "latest"], Math.min(timeoutMs, 3000), Math.min(timeoutMs, 2000)),
+      timeoutMs,
+      { result: null }
+    );
+    return res?.result ? BigInt(res.result) : 0n;
+  } catch (e) {
+    return 0n;
+  }
 }
 
-async function ethBlockNumber() {
-  const { result, latency, rpcHost } = await rpcRequest("eth_blockNumber", []);
-  return { block: result ? parseInt(result, 16) : null, latency, rpcHost: rpcHost || lastSuccessfulRpcHost };
+async function ethBlockNumber(timeoutMs = 4000) {
+  try {
+    const res = await withHardTimeout(
+      rpcRequest("eth_blockNumber", [], Math.min(timeoutMs, 3000), Math.min(timeoutMs, 2000)),
+      timeoutMs,
+      { result: null, latency: timeoutMs, rpcHost: lastSuccessfulRpcHost }
+    );
+    return { block: res?.result ? parseInt(res.result, 16) : null, latency: res?.latency || timeoutMs, rpcHost: res?.rpcHost || lastSuccessfulRpcHost };
+  } catch (e) {
+    return { block: null, latency: timeoutMs, rpcHost: lastSuccessfulRpcHost };
+  }
 }
 
 // ==========================================
@@ -2538,27 +2585,38 @@ function escapeHtml(str) {
 // 5. ON-CHAIN READERS (PANCAKE & TOKENS)
 // ==========================================
 async function fetchTokenMeta(tokenAddr) {
+  if (!tokenAddr) return { symbol: "TOKEN", decimals: 18 };
   tokenAddr = tokenAddr.toLowerCase();
   if (tokenCache[tokenAddr] && tokenCache[tokenAddr].decimals !== undefined) {
     return tokenCache[tokenAddr];
   }
-  const batchRes = await rpcBatchRequest([
-    { id: "sym", method: "eth_call", params: [{ to: tokenAddr, data: "0x95d89b41" }, "latest"] },
-    { id: "dec", method: "eth_call", params: [{ to: tokenAddr, data: "0x313ce567" }, "latest"] }
-  ]);
   let symResult = null;
   let decResult = null;
-  if (batchRes.success) {
-    symResult = batchRes.results.sym;
-    decResult = batchRes.results.dec;
-  } else {
-    const [symRes, decRes] = await Promise.all([
-      ethCall(tokenAddr, "0x95d89b41"),
-      ethCall(tokenAddr, "0x313ce567")
-    ]);
-    symResult = symRes?.result;
-    decResult = decRes?.result;
-  }
+  try {
+    const batchRes = await withHardTimeout(
+      rpcBatchRequest([
+        { id: "sym", method: "eth_call", params: [{ to: tokenAddr, data: "0x95d89b41" }, "latest"] },
+        { id: "dec", method: "eth_call", params: [{ to: tokenAddr, data: "0x313ce567" }, "latest"] }
+      ], 4500, 2500),
+      5000,
+      { success: false, results: {}, errors: {} }
+    );
+    if (batchRes && batchRes.success) {
+      symResult = batchRes.results.sym;
+      decResult = batchRes.results.dec;
+    } else {
+      const [symRes, decRes] = await withHardTimeout(
+        Promise.all([
+          ethCall(tokenAddr, "0x95d89b41", 3000),
+          ethCall(tokenAddr, "0x313ce567", 3000)
+        ]),
+        3500,
+        [{ result: null }, { result: null }]
+      );
+      symResult = symRes?.result;
+      decResult = decRes?.result;
+    }
+  } catch (e) {}
 
   const symbol = decodeString(symResult) || "TOKEN";
   const decimals = decResult ? parseInt(decResult, 16) : 18;
@@ -2587,6 +2645,7 @@ function getProjectQuoteConfig(pOrToken) {
   };
 }
 
+// v13: Hard timeouts on both ethCall legs to prevent hanging
 async function fetchPairAddress(tokenAddr, preferredQuote = null) {
   if (!tokenAddr) return null;
   tokenAddr = tokenAddr.toLowerCase();
@@ -2606,9 +2665,17 @@ async function fetchPairAddress(tokenAddr, preferredQuote = null) {
     };
   }
 
-  // 1. Try configured quote pair
+  // 1. Try configured quote pair with hard timeout
   const data1 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(cfg.primaryAddr);
-  const res1 = await ethCall(FACTORY, data1);
+  let res1 = null;
+  try {
+    res1 = await Promise.race([
+      ethCall(FACTORY, data1, 3500),
+      new Promise(resolve => setTimeout(() => resolve({ result: null, error: new Error("pair address query timeout") }), 3800))
+    ]);
+  } catch (e) {
+    res1 = { result: null, error: e };
+  }
   if (res1 && res1.result && res1.result.length >= 66) {
     const pair1 = "0x" + res1.result.slice(-40);
     if (pair1 !== "0x0000000000000000000000000000000000000000") {
@@ -2621,9 +2688,17 @@ async function fetchPairAddress(tokenAddr, preferredQuote = null) {
     }
   }
 
-  // 2. Fallback to alternative quote pair
+  // 2. Fallback to alternative quote pair with hard timeout
   const data2 = "0xe6a43905" + padAddress(tokenAddr) + padAddress(cfg.secondaryAddr);
-  const res2 = await ethCall(FACTORY, data2);
+  let res2 = null;
+  try {
+    res2 = await Promise.race([
+      ethCall(FACTORY, data2, 3500),
+      new Promise(resolve => setTimeout(() => resolve({ result: null, error: new Error("alt pair address query timeout") }), 3800))
+    ]);
+  } catch (e) {
+    res2 = { result: null, error: e };
+  }
   if (res2 && res2.result && res2.result.length >= 66) {
     const pair2 = "0x" + res2.result.slice(-40);
     if (pair2 !== "0x0000000000000000000000000000000000000000") {
@@ -2639,24 +2714,37 @@ async function fetchPairAddress(tokenAddr, preferredQuote = null) {
   return null;
 }
 
+// v13: Hard timeouts on batch request and fallback branch
 async function fetchPairReserves(pairAddr, tokenAddr) {
   if (!pairAddr) return { wbnbReserve: 0n, quoteReserve: 0n, tokenReserve: 0n, quoteSymbol: "WBNB" };
-  const batchRes = await rpcBatchRequest([
-    { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
-    { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
-  ]);
   let resHex = null;
   let t0Hex = null;
-  if (batchRes.success) {
-    resHex = batchRes.results.res;
-    t0Hex = batchRes.results.t0;
-  } else {
-    const [resRes, t0Res] = await Promise.all([
-      ethCall(pairAddr, "0x0902f1ac"),
-      ethCall(pairAddr, "0x0dfe1681")
+
+  try {
+    const batchRes = await Promise.race([
+      rpcBatchRequest([
+        { id: "res", method: "eth_call", params: [{ to: pairAddr, data: "0x0902f1ac" }, "latest"] },
+        { id: "t0", method: "eth_call", params: [{ to: pairAddr, data: "0x0dfe1681" }, "latest"] }
+      ], 4000, 2500),
+      new Promise(resolve => setTimeout(() => resolve({ success: false, results: {}, errors: {} }), 4500))
     ]);
-    resHex = resRes?.result;
-    t0Hex = t0Res?.result;
+
+    if (batchRes && batchRes.success) {
+      resHex = batchRes.results.res;
+      t0Hex = batchRes.results.t0;
+    } else {
+      const [resRes, t0Res] = await Promise.race([
+        Promise.all([
+          ethCall(pairAddr, "0x0902f1ac", 2500),
+          ethCall(pairAddr, "0x0dfe1681", 2500)
+        ]),
+        new Promise(resolve => setTimeout(() => resolve([{ result: null }, { result: null }]), 3000))
+      ]);
+      resHex = resRes?.result;
+      t0Hex = t0Res?.result;
+    }
+  } catch (err) {
+    console.warn("fetchPairReserves error:", err);
   }
 
   if (!resHex || resHex.length < 130) {
@@ -2735,7 +2823,7 @@ async function updateBnbUsdPrice() {
 }
 
 // Read Presale Sold Shares
-// v11: Probe caching & negative cache. Each candidate tested at most once per session.
+// v13: Probe caching & negative cache with fast timeouts.
 async function readPresaleSoldShares(p) {
   const contractAddr = p.sale || p.presale;
   if (!contractAddr) {
@@ -2743,7 +2831,7 @@ async function readPresaleSoldShares(p) {
   }
   if (!p.state) p.state = {};
 
-  // v11: Negative cache - skip probing if project is verified to have no progress function
+  // Negative cache - skip probing if project is verified to have no progress function
   if (p.state.noProgressFn) {
     return { success: false, sold: (p.state && p.state.soldHighWater) || p.manualSold || 0, source: "手动录入" };
   }
@@ -2751,7 +2839,7 @@ async function readPresaleSoldShares(p) {
   if (p.progressFn && p.progressFn.trim()) {
     const fn = normalizeFn(p.progressFn);
     const selector = getSelector(fn);
-    const { result, error } = await ethCall(contractAddr, selector);
+    const { result, error } = await ethCall(contractAddr, selector, 3000);
     if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -2760,7 +2848,7 @@ async function readPresaleSoldShares(p) {
     }
   }
 
-  // v11: Probe candidates - each candidate tested at most once per page session
+  // Probe candidates - each candidate tested at most once per page session
   if (!p.state.testedProgressCandidates) {
     p.state.testedProgressCandidates = {};
   }
@@ -2772,7 +2860,7 @@ async function readPresaleSoldShares(p) {
     p.state.testedProgressCandidates[cand] = true;
 
     const sel = getSelector(cand);
-    const { result, error } = await ethCall(contractAddr, sel);
+    const { result, error } = await ethCall(contractAddr, sel, 2500);
     if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -2797,7 +2885,7 @@ async function readPresaleSoldShares(p) {
 }
 
 // Check Presale Opened Function
-// v11: Probe caching, negative cache & openedFn="none" sentinel.
+// v13: Probe caching, negative cache & openedFn="none" sentinel with fast timeouts.
 async function checkPresaleOpened(p) {
   const contractAddr = p.sale || p.presale;
   if (!contractAddr) return false;
@@ -2805,15 +2893,15 @@ async function checkPresaleOpened(p) {
   if (p.state.openedLatched) return true;
 
   const rawOpenFn = p.openedFn && p.openedFn.trim();
-  // v11: Sentinel "none" means project definitely has no opened view function
+  // Sentinel "none" means project definitely has no opened view function
   if (rawOpenFn && rawOpenFn.toLowerCase() === "none") return false;
-  // v11: Negative cache - skip probing if project is verified to have no opened function
+  // Negative cache - skip probing if project is verified to have no opened function
   if (p.state.noOpenedFn) return false;
 
   if (rawOpenFn) {
     const fn = normalizeFn(rawOpenFn);
     const selector = getSelector(fn);
-    const { result, error } = await ethCall(contractAddr, selector);
+    const { result, error } = await ethCall(contractAddr, selector, 3000);
     if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -2824,7 +2912,7 @@ async function checkPresaleOpened(p) {
     }
   }
 
-  // v11: Probe candidates - each candidate tested at most once per page session
+  // Probe candidates - each candidate tested at most once per page session
   if (!p.state.testedOpenedCandidates) {
     p.state.testedOpenedCandidates = {};
   }
@@ -2836,7 +2924,7 @@ async function checkPresaleOpened(p) {
     p.state.testedOpenedCandidates[cand] = true;
 
     const sel = getSelector(cand);
-    const { result, error } = await ethCall(contractAddr, sel);
+    const { result, error } = await ethCall(contractAddr, sel, 2500);
     if (!error && result && result !== "0x") {
       try {
         const val = BigInt(result);
@@ -3208,28 +3296,24 @@ window.addEventListener("keydown", (e) => {
 });
 
 // Helper: Snapshot badge & dimming management
-function setSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null) {
+function setCardASnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null, customText = null) {
   const badgeA = document.getElementById("cardASnapshotBadge");
-  const badgeB = document.getElementById("cardBSnapshotBadge");
-  const dimEls = [
+  const dimElsA = [
     document.getElementById("sharesSoldNum"),
-    document.getElementById("sharesSoldPct"),
-    document.getElementById("curPriceBnb"),
-    document.getElementById("curPriceUsd"),
-    document.getElementById("nominalMultiple"),
-    document.getElementById("netMultiple")
+    document.getElementById("sharesSoldPct")
   ];
 
   if (!isSnapshot && !isPending && !isFailed) {
     if (badgeA) badgeA.style.display = "none";
-    if (badgeB) badgeB.style.display = "none";
-    dimEls.forEach(el => el && el.classList.remove("snapshot-dim"));
+    dimElsA.forEach(el => el && el.classList.remove("snapshot-dim"));
     return;
   }
 
-  let text = "";
+  let text = customText || "";
   let className = "snapshot-badge ";
-  if (isPending) {
+  if (customText) {
+    className += isFailed ? "badge-failed" : "badge-pending";
+  } else if (isPending) {
     className += "badge-pending";
     text = snapTs ? `快照 ${snapTs} · 读取中…` : "读取中…";
   } else if (isFailed) {
@@ -3245,12 +3329,58 @@ function setSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null) {
     badgeA.className = className;
     badgeA.style.display = "inline-block";
   }
+  if (isPending) {
+    dimElsA.forEach(el => el && el.classList.add("snapshot-dim"));
+  } else {
+    dimElsA.forEach(el => el && el.classList.remove("snapshot-dim"));
+  }
+}
+
+function setCardBSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null, customText = null) {
+  const badgeB = document.getElementById("cardBSnapshotBadge");
+  const dimElsB = [
+    document.getElementById("curPriceBnb"),
+    document.getElementById("curPriceUsd"),
+    document.getElementById("nominalMultiple"),
+    document.getElementById("netMultiple")
+  ];
+
+  if (!isSnapshot && !isPending && !isFailed) {
+    if (badgeB) badgeB.style.display = "none";
+    dimElsB.forEach(el => el && el.classList.remove("snapshot-dim"));
+    return;
+  }
+
+  let text = customText || "";
+  let className = "snapshot-badge ";
+  if (customText) {
+    className += isFailed ? "badge-failed" : "badge-pending";
+  } else if (isPending) {
+    className += "badge-pending";
+    text = snapTs ? `快照 ${snapTs} · 读取中…` : "读取中…";
+  } else if (isFailed) {
+    className += "badge-failed";
+    text = snapTs ? `快照 ${snapTs} · 价格读取超时` : "价格读取超时";
+  } else {
+    className += "badge-pending";
+    text = snapTs ? `快照 ${snapTs}` : "快照数据";
+  }
+
   if (badgeB) {
     badgeB.textContent = text;
     badgeB.className = className;
     badgeB.style.display = "inline-block";
   }
-  dimEls.forEach(el => el && el.classList.add("snapshot-dim"));
+  if (isPending) {
+    dimElsB.forEach(el => el && el.classList.add("snapshot-dim"));
+  } else {
+    dimElsB.forEach(el => el && el.classList.remove("snapshot-dim"));
+  }
+}
+
+function setSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs = null) {
+  setCardASnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs);
+  setCardBSnapshotBadgeState(isSnapshot, isPending, isFailed, snapTs);
 }
 
 // Render Card A: Presale Progress
@@ -3306,7 +3436,7 @@ function renderProgressCard(p, soldCount, totalCount, isSnapshot, statusSourceTe
 }
 
 // Render Card B: Price & Returns
-function renderPriceCard(p, curPrice, quoteNorm, tokNorm, symbol, basePriceBnb, isSnapshot, quoteSymbolOverride = null) {
+function renderPriceCard(p, curPrice, quoteNorm, tokNorm, symbol, basePriceBnb, isSnapshot, quoteSymbolOverride = null, failReason = null) {
   const poolBadge = document.getElementById("poolStatusBadge");
   const banner = document.getElementById("strategyPrompt");
 
@@ -3439,7 +3569,11 @@ function renderPriceCard(p, curPrice, quoteNorm, tokNorm, symbol, basePriceBnb, 
     const cachedPair = tokenCache[tokenLower]?.pair;
     const isOpened = !!(p.state && p.state.openedLatched);
 
-    if (isOpened) {
+    if (failReason) {
+      poolBadge.textContent = "读取异常";
+      poolBadge.className = "tab-badge badge-unopened";
+      document.getElementById("poolReservesSummary").textContent = failReason;
+    } else if (isOpened) {
       poolBadge.textContent = "已开盘";
       poolBadge.className = "tab-badge badge-opened";
       document.getElementById("poolReservesSummary").textContent = "已探明开盘 (等待储备读数)";
@@ -3462,10 +3596,14 @@ function renderPriceCard(p, curPrice, quoteNorm, tokNorm, symbol, basePriceBnb, 
     document.getElementById("unrealizedPnlVal").textContent = "—";
     document.getElementById("poolDuration").textContent = (p.state && p.state.openedAt) ? `${Math.floor((Date.now() - p.state.openedAt) / 60000)} 分钟` : "—";
     
-    banner.className = "strategy-banner strat-alert-neutral";
-    if (isOpened || cachedPair) {
+    if (failReason) {
+      banner.className = "strategy-banner strat-alert-low";
+      banner.innerHTML = `⚠️ <b>[提示]</b> ${escapeHtml(failReason)}，已保留进度与基础信息`;
+    } else if (isOpened || cachedPair) {
+      banner.className = "strategy-banner strat-alert-neutral";
       banner.innerHTML = isOpened ? `💡 [提示] 项目已开盘，等待池储备读数就绪` : `💡 [提示] 流动池已探测到，等待储备读数注入`;
     } else {
+      banner.className = "strategy-banner strat-alert-neutral";
       banner.innerHTML = `💡 [提示] 该项目流动池未建立或无储备，等待发售完成上池`;
     }
   }
@@ -3548,16 +3686,48 @@ async function refreshTopBar() {
 
 let lastActiveRenderedProjectId = null;
 const projectRefreshInProgress = new Set();
+const projectRefreshStartTime = {};
+const projectRefreshStepName = {};
+let currentRefreshCycleSeq = 0;
+let lastFullCycleStats = {
+  durationMs: 0,
+  status: "待运行",
+  ts: 0
+};
 
 async function refreshActiveProject() {
   const p = projects[activeProjectIdx];
   if (!p) return;
 
-  // 1. Serialization check: if this project is already refreshing, skip next trigger
+  // 1. Serialization check with 20s watchdog guard
   if (projectRefreshInProgress.has(p.id)) {
-    return;
+    const startTime = projectRefreshStartTime[p.id] || 0;
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= 20000) {
+      const step = projectRefreshStepName[p.id] || "网络读取";
+      addLog("ERR", `${p.name} · 单轮刷新超过20秒未结束（${elapsed}ms）· 超时步骤: ${step} · 看门狗强制释放锁`, p.id);
+      projectRefreshInProgress.delete(p.id);
+      lastFullCycleStats = { durationMs: elapsed, status: `超时异常(${step})`, ts: Date.now() };
+    } else {
+      return;
+    }
   }
+
   projectRefreshInProgress.add(p.id);
+  projectRefreshStartTime[p.id] = Date.now();
+  projectRefreshStepName[p.id] = "初始化元数据";
+  const cycleId = ++currentRefreshCycleSeq;
+
+  // Active Watchdog Timer: 20 seconds
+  const watchdogTimer = setTimeout(() => {
+    if (projectRefreshInProgress.has(p.id) && currentRefreshCycleSeq === cycleId) {
+      const elapsed = Date.now() - (projectRefreshStartTime[p.id] || Date.now());
+      const step = projectRefreshStepName[p.id] || "网络读取";
+      addLog("ERR", `${p.name} · 单轮刷新超过20秒未结束（${elapsed}ms）· 超时步骤: ${step} · 看门狗强制释放`, p.id);
+      projectRefreshInProgress.delete(p.id);
+      lastFullCycleStats = { durationMs: elapsed, status: `看门狗超时(${step})`, ts: Date.now() };
+    }
+  }, 20000);
 
   try {
     // Synchronous Card Titles & Basic Project Meta
@@ -3645,7 +3815,8 @@ async function refreshActiveProject() {
         renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceBnb, false, quoteCfg.primarySymbol);
         renderProgressCard(p, initialSold, totalCount, false, p.manualSold ? "手动录入" : "等待链上读取");
       }
-      setSnapshotBadgeState(true, true, false, snapTs);
+      setCardASnapshotBadgeState(true, true, false, snapTs);
+      setCardBSnapshotBadgeState(true, true, false, snapTs);
       lastActiveRenderedProjectId = p.id;
     }
 
@@ -4028,6 +4199,7 @@ async function refreshActiveProject() {
 // ==========================================
 let isFastLaneInFlight = false;
 let fastLaneTimer = null;
+let lastFastLaneHeartbeatTime = Date.now();
 
 function checkIsInSaleWindow(p) {
   if (!p) return false;
@@ -4050,6 +4222,17 @@ async function pollFastLane() {
   if (document.hidden) return;
   const p = projects[activeProjectIdx];
   if (!p) return;
+
+  // v13: 60-second diagnostic heartbeat (differentiates alive-but-unchanged from stalled polling)
+  const now = Date.now();
+  if (now - lastFastLaneHeartbeatTime >= 60000) {
+    lastFastLaneHeartbeatTime = now;
+    const currentSold = (p.state && p.state.soldHighWater) || p.manualSold || 0;
+    const totalCount = p.totalShares || 10000;
+    const pctStr = ((currentSold / totalCount) * 100).toFixed(1);
+    const cycleInfo = lastFullCycleStats.ts ? `${lastFullCycleStats.status} (${lastFullCycleStats.durationMs}ms)` : "尚未完成整轮";
+    addLog("SYS", `[心跳] 轮询保持运行 · 当前项目: ${p.name} · 最新进度: ${currentSold}/${totalCount} (${pctStr}%) · 最近整轮: ${cycleInfo}`, p.id);
+  }
 
   const contractAddr = p.sale || p.presale;
   if (!contractAddr) return;
@@ -5745,7 +5928,7 @@ projects.forEach(p => {
 // Immediately trigger manifest sync on page load
 syncProjectsManifest();
 
-addLog("SYS", "Agent 打新交互看板已加载完成。v10 中继粘性主通道 + JSON-RPC 批量引擎就绪。");
+addLog("SYS", "Agent 打新交互看板已加载完成。v13 刷新看门狗 + 步骤隔离与超时防护就绪。");
 
 // Periodic Timers
 // 1. Top bar block & balance: 3s
