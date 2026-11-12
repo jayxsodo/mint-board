@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-12T18:29:36+08:00",
+    "updatedAt": "2026-11-12T19:02:26+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -19,7 +19,7 @@
         },
         {
             "id": "hajimi",
-            "name": "Hajimi 哈基米",
+            "name": "Hajimi \u54c8\u57fa\u7c73",
             "token": "0x8D9DE194b3fDabc846e78f34dE7191c639adc176",
             "sale": "0x8D9DE194b3fDabc846e78f34dE7191c639adc176",
             "pricePerShare": 0.003,
@@ -49,7 +49,7 @@
         },
         {
             "id": "hajimi2",
-            "name": "哈基米agent（新站）",
+            "name": "\u54c8\u57fa\u7c73agent\uff08\u65b0\u7ad9\uff09",
             "token": "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
             "sale": "0x8a0fd950d5cce5ff442a6ff3b2b0b782efda6990",
             "pricePerShare": 0.003,
@@ -79,7 +79,7 @@
         },
         {
             "id": "crazyape",
-            "name": "疯狂大猿猴 CrazyApe",
+            "name": "\u75af\u72c2\u5927\u733f\u7334 CrazyApe",
             "token": "0x36A38C6F104191dD78b3011BA13c838c913F88db",
             "sale": "0xc9Bd8d5cb4987d03C6da3Ce0A097735e8B51813D",
             "pricePerShare": 0.003,
@@ -122,6 +122,21 @@
             "endAt": "2026-11-14T21:00:00+08:00",
             "progressFn": "totalLotsMinted",
             "openedFn": "opened",
+            "sync": true
+        },
+        {
+            "id": "osk",
+            "name": "OSK Agent",
+            "token": "0xF3DE5D50Ff0b21fDAB5f5ee7AcD3Cbf78C2b2e68",
+            "sale": "0x5aA04717BF9A86C421caECBaB33d4C2C73C4d156",
+            "pricePerShare": 0.008,
+            "tokensPerShare": 1000000,
+            "totalShares": 3888,
+            "taxPct": 3,
+            "startAt": "2026-11-12T18:00:00+08:00",
+            "endAt": "2026-11-15T18:00:00+08:00",
+            "progressFn": "seatsTaken",
+            "openedFn": "openedAt",
             "sync": true
         }
     ]
