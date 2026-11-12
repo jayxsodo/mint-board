@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-12T08:27:38+08:00",
+    "updatedAt": "2026-11-12T18:29:36+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -106,6 +106,21 @@
             "startAt": "2026-11-12T01:15:00+08:00",
             "endAt": "",
             "progressFn": "totalMinted",
+            "openedFn": "opened",
+            "sync": true
+        },
+        {
+            "id": "agent4",
+            "name": "Agent 4",
+            "token": "0xfC7b3359E280E6eFA59EeB8a12575fE9C0C3e557",
+            "sale": "0xfC7b3359E280E6eFA59EeB8a12575fE9C0C3e557",
+            "pricePerShare": 0.003,
+            "tokensPerShare": 14400000,
+            "totalShares": 10000,
+            "taxPct": 2,
+            "startAt": "2026-11-12T21:00:00+08:00",
+            "endAt": "2026-11-14T21:00:00+08:00",
+            "progressFn": "totalLotsMinted",
             "openedFn": "opened",
             "sync": true
         }
