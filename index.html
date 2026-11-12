@@ -3835,6 +3835,8 @@ async function refreshActiveProject() {
     let fetchFailed = false;
     let failReason = "";
     let balanceUpdatedInBatch = false;
+    let matchedQuoteSymbol = quoteCfg.primarySymbol;
+    let matchedQuoteAddr = quoteCfg.primaryAddr;
 
     try {
       const tokenAddr = (p.token || "").toLowerCase();
@@ -3947,8 +3949,8 @@ async function refreshActiveProject() {
         let pairAddr = cachedPair;
         let resHex = b1.results.reserves;
         let t0Hex = b1.results.token0;
-        let matchedQuoteSymbol = tokenCache[tokenAddr]?.quoteSymbol || quoteCfg.primarySymbol;
-        let matchedQuoteAddr = tokenCache[tokenAddr]?.quoteToken || quoteCfg.primaryAddr;
+        matchedQuoteSymbol = tokenCache[tokenAddr]?.quoteSymbol || quoteCfg.primarySymbol;
+        matchedQuoteAddr = tokenCache[tokenAddr]?.quoteToken || quoteCfg.primaryAddr;
 
         if (!pairAddr && (b1.results.factory_pair || b1.results.factory_pair_alt)) {
           let foundPair = null;
@@ -4189,7 +4191,27 @@ async function refreshActiveProject() {
     }
     recalculateSellQuote();
 
+  } catch (err) {
+    const errText = String((err && (err.stack || err.message)) || err);
+    addLog("ERR", `${p.name} · 刷新异常: ${errText.slice(0, 600)}`, p.id);
+    try {
+      const qCfg = getProjectQuoteConfig(p);
+      const isUsdtVal = qCfg.isUsdt;
+      const costPerShareVal = isUsdtVal ? (p.pricePerShareQuote || 1) : (p.pricePerShare || 0);
+      const basePriceVal = (costPerShareVal && p.tokensPerShare) ? (costPerShareVal / p.tokensPerShare) : 0;
+      const totalCountVal = p.totalShares || 10000;
+      const snapTs = p.state?.lastGood?.ts ? new Date(p.state.lastGood.ts).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+      const effectiveSold = Math.max(p.state?.soldHighWater || 0, p.state?.lastGood?.sold || 0, p.manualSold || 0);
+      renderProgressCard(p, effectiveSold, totalCountVal, true, "链上读取失败，保留快照");
+      if (p.state?.lastGood && p.state.lastGood.price > 0) {
+        renderPriceCard(p, p.state.lastGood.price, p.state.lastGood.poolWBNB || 0, p.state.lastGood.poolToken || 0, p.state.lastGood.symbol || "TOKEN", basePriceVal, true, p.state.lastGood.poolQuoteSymbol || qCfg.primarySymbol);
+      } else {
+        renderPriceCard(p, 0, 0, 0, "TOKEN", basePriceVal, false, qCfg.primarySymbol);
+      }
+      setSnapshotBadgeState(true, false, true, snapTs);
+    } catch (_) {}
   } finally {
+    clearTimeout(watchdogTimer);
     projectRefreshInProgress.delete(p.id);
   }
 }
@@ -5928,7 +5950,7 @@ projects.forEach(p => {
 // Immediately trigger manifest sync on page load
 syncProjectsManifest();
 
-addLog("SYS", "Agent 打新交互看板已加载完成。v13 刷新看门狗 + 步骤隔离与超时防护就绪。");
+addLog("SYS", "Agent 打新交互看板已加载完成。v14 刷新看门狗 + 步骤隔离与超时防护就绪。");
 
 // Periodic Timers
 // 1. Top bar block & balance: 3s
@@ -5955,6 +5977,14 @@ document.addEventListener("visibilitychange", () => {
     triggerFastLaneImmediate();
     scheduleNextPatrolTick(1000);
   }
+});
+</script>
+<script>
+window.addEventListener('error', function(e) {
+  try { addLog('ERR', 'Uncaught: ' + e.message + ' @ ' + (e.filename || '') + ':' + (e.lineno || '') + ':' + (e.colno || '') + ' | ' + String((e.error && e.error.stack) || '').slice(0, 600)); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', function(e) {
+  try { var r = e.reason; addLog('ERR', 'UnhandledRejection: ' + String((r && (r.stack || r.message)) || r).slice(0, 600)); } catch (_) {}
 });
 </script>
 </body>
