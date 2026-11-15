@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-14T23:32:32+08:00",
+    "updatedAt": "2026-11-15T11:47:14+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -155,18 +155,18 @@
             "sync": true
         },
         {
-            "id": "swarm",
-            "name": "SWARM",
-            "token": "0xc7FADBe8211AEB1D533b43c308D5ca434B587cbF",
-            "sale": "0xc7FADBe8211AEB1D533b43c308D5ca434B587cbF",
-            "pricePerShare": 0.003,
-            "tokensPerShare": 6000000,
-            "totalShares": 20000,
-            "taxPct": 1,
-            "startAt": "2026-11-14T21:00:00+08:00",
-            "endAt": "2026-11-15T21:00:00+08:00",
-            "progressFn": "totalLotsMinted",
-            "openedFn": "opened",
+            "id": "degen",
+            "name": "DEGEN",
+            "token": "0xE332E73084e22b4075eE3F427fc6361930F5B341",
+            "sale": "0xE2c4Fb97FeBa74a866aC0544a36BEF186C9DE881",
+            "pricePerShare": 0.002,
+            "tokensPerShare": 50000000,
+            "totalShares": 10000,
+            "taxPct": 2,
+            "startAt": "2026-11-15T14:00:00+08:00",
+            "endAt": "2026-11-18T14:00:00+08:00",
+            "progressFn": "totalMinted",
+            "openedFn": "finalized",
             "sync": true
         }
     ]
