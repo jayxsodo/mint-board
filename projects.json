@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-16T03:40:49+08:00",
+    "updatedAt": "2026-11-16T16:11:42+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -152,6 +152,36 @@
             "endAt": "2026-11-18T14:00:00+08:00",
             "progressFn": "totalMinted",
             "openedFn": "finalized",
+            "sync": true
+        },
+        {
+            "id": "cluck",
+            "name": "\u65e9\u8d77\u9e21 CLUCK",
+            "token": "0x255Cc65734ee114Ddc428CC6BF2cC85b40915E26",
+            "sale": "0x255Cc65734ee114Ddc428CC6BF2cC85b40915E26",
+            "pricePerShare": 0.0033,
+            "tokensPerShare": 120000,
+            "totalShares": 5000,
+            "taxPct": 1,
+            "startAt": "2026-11-14T18:30:00+08:00",
+            "endAt": "2026-11-21T18:30:00+08:00",
+            "progressFn": "paidCount",
+            "openedFn": "opened",
+            "sync": true
+        },
+        {
+            "id": "piagent",
+            "name": "PiAgent",
+            "token": "0xDAAd1170Af9bc70536498e894FC52103A3254923",
+            "sale": "0xEADd830D4e0B0C11c5A16D692AeFb4C960dF0fe4",
+            "pricePerShare": 0.005,
+            "tokensPerShare": 9014000,
+            "totalShares": 8000,
+            "taxPct": 2,
+            "startAt": "2026-11-15T20:00:00+08:00",
+            "endAt": "2026-11-16T20:00:00+08:00",
+            "progressFn": "seats",
+            "openedFn": "openedAt",
             "sync": true
         }
     ]
