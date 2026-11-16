@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-16T22:07:02+08:00",
+    "updatedAt": "2026-11-17T03:03:44+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -182,21 +182,6 @@
             "endAt": "2026-11-16T20:00:00+08:00",
             "progressFn": "seats",
             "openedFn": "openedAt",
-            "sync": true
-        },
-        {
-            "id": "gta",
-            "name": "GTA AGENT",
-            "token": "0x3029743C776Cf7c27c165e90aa26642010f2ef2f",
-            "sale": "0x3029743C776Cf7c27c165e90aa26642010f2ef2f",
-            "pricePerShare": 0.003,
-            "tokensPerShare": 444444,
-            "totalShares": 15000,
-            "taxPct": 3,
-            "startAt": "2026-11-16T22:00:00+08:00",
-            "endAt": "2026-11-17T22:00:00+08:00",
-            "progressFn": "totalLotsMinted",
-            "openedFn": "opened",
             "sync": true
         }
     ]
