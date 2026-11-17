@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-17T03:03:44+08:00",
+    "updatedAt": "2026-11-17T21:09:53+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -182,6 +182,21 @@
             "endAt": "2026-11-16T20:00:00+08:00",
             "progressFn": "seats",
             "openedFn": "openedAt",
+            "sync": true
+        },
+        {
+            "id": "langyang",
+            "name": "\u72fc\u7f8a LANGYANG",
+            "token": "0x4a4f9c660f9b81c7ddd5d3cd1019289e1c1c6d48",
+            "sale": "0x7f855e19b3ee4179678b3f411f3a019bc17a1a50",
+            "pricePerShare": 0.0015,
+            "tokensPerShare": 1000,
+            "totalShares": 6999,
+            "taxPct": 3,
+            "startAt": "2026-11-17T21:30:00+08:00",
+            "endAt": "",
+            "progressFn": "minted",
+            "openedFn": "launched",
             "sync": true
         }
     ]
