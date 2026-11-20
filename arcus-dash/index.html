@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b0f19">
+  <title>Arcus↔Bybit 干跑信号 · 可视化看板</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --card-border: #1f293d;
+      --card-hover: #172033;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent-green: #10b981;
+      --accent-green-bg: rgba(16, 185, 129, 0.15);
+      --accent-green-border: rgba(16, 185, 129, 0.35);
+      --accent-amber: #f59e0b;
+      --accent-amber-bg: rgba(245, 158, 11, 0.15);
+      --accent-rose: #ef4444;
+      --accent-rose-bg: rgba(239, 68, 68, 0.15);
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --line-trigger: #f43f5e;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      line-height: 1.45;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      background-image: 
+        radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 100% 30%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Header */
+    header {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .title-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .status-badge.running {
+      background: var(--accent-green-bg);
+      color: #34d399;
+      border: 1px solid var(--accent-green-border);
+    }
+
+    .status-badge.stopped {
+      background: rgba(156, 163, 175, 0.15);
+      color: var(--text-muted);
+      border: 1px solid rgba(156, 163, 175, 0.3);
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .controls-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-refresh {
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: #e5e7eb;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-refresh:hover, .btn-refresh:active {
+      background: #374151;
+      color: #fff;
+    }
+
+    .btn-refresh.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .countdown-pill {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      background: rgba(31, 41, 55, 0.6);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #27354a;
+    }
+
+    .header-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .meta-label {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    .meta-val {
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: #e5e7eb;
+    }
+
+    /* Summary Stats Grid */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .summary-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent-cyan);
+    }
+
+    .stat-card.green::before { background: var(--accent-green); }
+    .stat-card.amber::before { background: var(--accent-amber); }
+    .stat-card.blue::before { background: var(--accent-blue); }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .stat-num {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: #fff;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .stat-sub {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+    }
+
+    /* Section Cards */
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #f3f4f6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-count {
+      background: #1f293d;
+      color: var(--accent-cyan);
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 9999px;
+      border: 1px solid #2b3b57;
+    }
+
+    .section-sub {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+    }
+
+    /* Table Styles */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #0f172a;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #e5e7eb;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr.highlight-row {
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    tr:hover {
+      background: var(--card-hover);
+    }
+
+    .symbol-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .symbol-name {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #fff;
+      font-family: var(--font-mono);
+    }
+
+    .symbol-pair {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    .mode-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .mode-pill.arb {
+      background: var(--accent-green-bg);
+      color: #34d399;
+      border: 1px solid var(--accent-green-border);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+    }
+
+    .mode-pill.volume {
+      background: var(--accent-amber-bg);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .mode-pill.none {
+      background: rgba(107, 114, 128, 0.15);
+      color: var(--text-dim);
+      border: 1px solid rgba(107, 114, 128, 0.25);
+    }
+
+    /* Spread Progress Bar */
+    .spread-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 140px;
+    }
+
+    .spread-bar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-family: var(--font-mono);
+    }
+
+    .spread-val {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .spread-val.triggered {
+      color: #34d399;
+    }
+
+    .spread-bar-track {
+      width: 100%;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .spread-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: #3b82f6;
+      transition: width 0.3s ease;
+    }
+
+    .spread-bar-fill.triggered {
+      background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .spread-bar-trigger-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      background: var(--line-trigger);
+      z-index: 2;
+    }
+
+    .spread-trigger-sub {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    .fund-val {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .fund-val.pos { color: #34d399; }
+    .fund-val.neg { color: #f87171; }
+    .fund-val.zero { color: var(--text-muted); }
+
+    .fund-raw {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    .liq-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .liq-badge.ok {
+      background: var(--accent-green-bg);
+      color: #34d399;
+      border: 1px solid var(--accent-green-border);
+    }
+
+    .liq-badge.no {
+      background: var(--accent-rose-bg);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    /* Chart Section */
+    .chart-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .pill-btn {
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: #9ca3af;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .pill-btn:hover {
+      background: #374151;
+      color: #fff;
+    }
+
+    .pill-btn.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .chart-canvas-wrap {
+      width: 100%;
+      height: 240px;
+      position: relative;
+      background: #0a0e17;
+      border-radius: 8px;
+      border: 1px solid #1f293d;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      margin-top: 6px;
+      color: var(--text-muted);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* Decisions Section */
+    .decisions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .decision-card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-left: 3px solid var(--accent-green);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .decision-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .dec-base {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dec-time {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .dec-plan {
+      font-size: 0.7rem;
+      color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    .dec-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+    }
+
+    .dec-metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .dec-metric-label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
+    .dec-metric-val {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #e5e7eb;
+    }
+
+    .dec-legs {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    @media (min-width: 500px) {
+      .dec-legs {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .leg-box {
+      background: #162032;
+      border: 1px solid #22324d;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+    }
+
+    .leg-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    .leg-tag.buy {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .leg-tag.sell {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+
+    /* MTM Section */
+    .mtm-hero {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 10px;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .mtm-hero {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .mtm-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mtm-label {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    .mtm-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: #fff;
+    }
+
+    .mtm-pnl.pos { color: #34d399; }
+    .mtm-pnl.neg { color: #f87171; }
+
+    .mtm-chart-wrap {
+      width: 100%;
+      height: 160px;
+      position: relative;
+      background: #0a0e17;
+      border-radius: 8px;
+      border: 1px solid #1f293d;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 30px 15px;
+      color: var(--text-dim);
+      font-size: 0.82rem;
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 8px;
+      border: 1px dashed #27354a;
+    }
+
+    /* Footer */
+    footer {
+      background: #0a0e17;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .footer-disclaimer {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    .footer-safety {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .safety-tag {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    /* Utilities */
+    .mono { font-family: var(--font-mono); }
+    .text-green { color: var(--accent-green); }
+    .text-dim { color: var(--text-dim); }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="header-top">
+        <div class="title-area">
+          <h1>
+            <span>⚡</span> Arcus↔Bybit 干跑信号
+          </h1>
+          <div id="statusBadge" class="status-badge running">
+            <span class="pulse-dot"></span>
+            <span id="statusText">干跑中</span>
+          </div>
+        </div>
+
+        <div class="controls-area">
+          <span id="countdownPill" class="countdown-pill">60s 刷新</span>
+          <button id="btnRefresh" class="btn-refresh" title="立即拉取最新 signals.json">
+            <svg id="refreshIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>刷新</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="header-meta">
+        <div class="meta-item">
+          <span class="meta-label">监控标的</span>
+          <span class="meta-val" id="metaUniverse">12 个标的</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">开始时间</span>
+          <span class="meta-val" id="metaStarted">—</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">运行总时长</span>
+          <span class="meta-val" id="metaDuration">—</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">数据更新</span>
+          <span class="meta-val" id="metaUpdated">—</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Summary Stats -->
+    <div class="summary-grid">
+      <div class="stat-card cyan">
+        <span class="stat-label">总扫描轮数</span>
+        <div class="stat-num" id="statScanCount">—</div>
+        <span class="stat-sub">全币种遍历轮次</span>
+      </div>
+
+      <div class="stat-card green">
+        <span class="stat-label">套利决策信号</span>
+        <div class="stat-num" id="statDecisionCount">—</div>
+        <span class="stat-sub">DECISION_ENTRY 触发</span>
+      </div>
+
+      <div class="stat-card amber">
+        <span class="stat-label">曾进套利档标的</span>
+        <div class="stat-num" id="statEverArbCount">—</div>
+        <span class="stat-sub">历史价差超阈值</span>
+      </div>
+
+      <div class="stat-card blue">
+        <span class="stat-label">当前套利档标的</span>
+        <div class="stat-num" id="statNowArbCount">—</div>
+        <span class="stat-sub">本轮实时符合条件</span>
+      </div>
+    </div>
+
+    <!-- Core Table: Symbols Spread & Mode -->
+    <section class="section-card">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">
+            <span>📊</span> 标的实时价差与档位
+            <span class="badge-count" id="tableSymbolCount">12 标的</span>
+          </h2>
+          <span class="section-sub">触发线: 10.75 bps (满格=21.5 bps) · 按中间价差从高到低排序</span>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>标的</th>
+              <th>当前档位</th>
+              <th>中间价差 (mid bps)</th>
+              <th>资金费差 (8h bps)</th>
+              <th>流动性</th>
+              <th>杠杆</th>
+              <th>累计套利扫描</th>
+              <th>累计决策</th>
+            </tr>
+          </thead>
+          <tbody id="symbolTableBody">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">加载数据中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Spread Trend Chart -->
+    <section class="section-card">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">
+            <span>📈</span> 价差时序走势 (mid bps)
+          </h2>
+          <span class="section-sub">红虚线 = 10.75 bps 触发阈值 · 每分钟 1 采样点</span>
+        </div>
+        <div class="chart-controls" id="chartFilterPills">
+          <button class="pill-btn active" data-filter="all">全部</button>
+          <button class="pill-btn" data-filter="arb">仅套利标的</button>
+        </div>
+      </div>
+
+      <div class="chart-canvas-wrap">
+        <canvas id="spreadChartCanvas"></canvas>
+      </div>
+      <div class="chart-legend" id="chartLegend"></div>
+    </section>
+
+    <!-- Decisions Log -->
+    <section class="section-card">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">
+            <span>🎯</span> 套利决策记录 (DECISION_ENTRY)
+            <span class="badge-count" id="decisionBadgeCount">0</span>
+          </h2>
+          <span class="section-sub">按时间倒序 · 模拟双腿下单计划</span>
+        </div>
+      </div>
+
+      <div class="decisions-list" id="decisionsContainer">
+        <div class="empty-state">暂无套利决策</div>
+      </div>
+    </section>
+
+    <!-- Simulated PnL (MTM) -->
+    <section class="section-card">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">
+            <span>💰</span> 模拟持仓盈亏 (OPEN_MTM)
+          </h2>
+          <span class="section-sub">模拟持仓 Mark-to-Market 表现</span>
+        </div>
+      </div>
+
+      <div id="mtmHeroContainer">
+        <div class="empty-state">暂无持仓</div>
+      </div>
+
+      <div class="mtm-chart-wrap" id="mtmChartWrap" style="display: none;">
+        <canvas id="mtmCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p class="footer-disclaimer">
+        干跑模式，仅模拟信号，未下任何真单、未动一分钱。价差与资金费为机器人实读的公开行情；触发线 10.75 bps = 往返手续费 7.75 + 3 缓冲。
+      </p>
+      <div class="footer-safety">
+        <span class="safety-tag">✓ 纯本地只读 signals.json</span>
+        <span class="safety-tag">✓ 零外部 CDN 依赖</span>
+        <span class="safety-tag">✓ 零私钥 / 零签名 / 零资金</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // State
+    let signalsData = null;
+    let selectedFilter = 'all'; // 'all', 'arb', or specific symbol
+    let activeSymbols = new Set();
+    let autoRefreshTimer = null;
+    let countdownSec = 60;
+    const TRIGGER_BPS = 10.75;
+    const MAX_BAR_BPS = TRIGGER_BPS * 2; // 21.5 bps
+
+    // Palette for lines
+    const COLOR_PALETTE = [
+      '#10b981', '#38bdf8', '#f59e0b', '#a855f7', 
+      '#ec4899', '#14b8a6', '#f97316', '#6366f1', 
+      '#eab308', '#06b6d4', '#84cc16', '#93c5fd'
+    ];
+
+    // Helper functions
+    function _fmtNum(val, dec = 2, fallback = '—') {
+      if (val === null || val === undefined || isNaN(val)) return fallback;
+      return Number(val).toFixed(dec);
+    }
+
+    function _formatTime(isoStr) {
+      if (!isoStr) return '—';
+      try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function _formatDateTime(isoStr) {
+      if (!isoStr) return '—';
+      try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function _formatDuration(startIso) {
+      if (!startIso) return '—';
+      try {
+        const start = new Date(startIso).getTime();
+        if (isNaN(start)) return '—';
+        const now = Date.now();
+        const diffSec = Math.max(0, Math.floor((now - start) / 1000));
+        const h = Math.floor(diffSec / 3600);
+        const m = Math.floor((diffSec % 3600) / 60);
+        const s = diffSec % 60;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+      } catch (e) {
+        return '—';
+      }
+    }
+
+    // Fetch signals.json
+    async function loadData() {
+      const btn = document.getElementById('btnRefresh');
+      btn.classList.add('spinning');
+      try {
+        const res = await fetch('signals.json?_t=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        signalsData = await res.json();
+        renderAll();
+      } catch (err) {
+        console.error('Failed to load signals.json:', err);
+      } finally {
+        setTimeout(() => btn.classList.remove('spinning'), 500);
+        countdownSec = 60;
+      }
+    }
+
+    // Render Everything
+    function renderAll() {
+      if (!signalsData) return;
+
+      const run = signalsData.run || {};
+      const latest = signalsData.latest || {};
+      const summary = signalsData.summary || {};
+      const decisions = signalsData.decisions || [];
+      const mtm = signalsData.mtm || [];
+      const series = signalsData.series || {};
+      const universe = run.universe || Object.keys(latest) || [];
+
+      // 1. Header & Status
+      const statusBadge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      if (run.stopped) {
+        statusBadge.className = 'status-badge stopped';
+        statusText.textContent = run.stop_state ? `已停止 (${run.stop_state})` : '已停止';
+      } else {
+        statusBadge.className = 'status-badge running';
+        statusText.textContent = '干跑中 (DRY RUN)';
+      }
+
+      document.getElementById('metaUniverse').textContent = `${universe.length} 个标的`;
+      document.getElementById('metaStarted').textContent = _formatDateTime(run.started);
+      document.getElementById('metaDuration').textContent = _formatDuration(run.started);
+      document.getElementById('metaUpdated').textContent = _formatTime(signalsData.generated_at);
+
+      // 2. Summary Grid
+      document.getElementById('statScanCount').textContent = signalsData.scan_count != null ? signalsData.scan_count : '—';
+      document.getElementById('statDecisionCount').textContent = decisions.length;
+      
+      let everArb = 0;
+      Object.keys(summary).forEach(k => {
+        if (summary[k] && summary[k].arb_scans > 0) everArb++;
+      });
+      document.getElementById('statEverArbCount').textContent = `${everArb} / ${universe.length}`;
+
+      let nowArb = 0;
+      Object.keys(latest).forEach(k => {
+        if (latest[k] && latest[k].mode === 'arb') nowArb++;
+      });
+      document.getElementById('statNowArbCount').textContent = `${nowArb} 个`;
+
+      // 3. Table of Symbols
+      renderSymbolTable(universe, latest, summary);
+
+      // 4. Spread Chart
+      renderSpreadChart(series, universe, latest);
+
+      // 5. Decisions
+      renderDecisions(decisions);
+
+      // 6. MTM
+      renderMtm(mtm);
+    }
+
+    // Render Core Table
+    function renderSymbolTable(universe, latest, summary) {
+      const tbody = document.getElementById('symbolTableBody');
+      document.getElementById('tableSymbolCount').textContent = `${universe.length} 标的`;
+
+      // Sort universe by mid_bps descending
+      const sorted = [...universe].sort((a, b) => {
+        const midA = (latest[a] && typeof latest[a].mid_bps === 'number') ? latest[a].mid_bps : -999;
+        const midB = (latest[b] && typeof latest[b].mid_bps === 'number') ? latest[b].mid_bps : -999;
+        return midB - midA;
+      });
+
+      let html = '';
+      sorted.forEach(sym => {
+        const lat = latest[sym] || {};
+        const sum = summary[sym] || {};
+        const mode = lat.mode;
+        const mid = lat.mid_bps;
+        const need = lat.need_bps || TRIGGER_BPS;
+        const fundDiff = lat.fund_diff;
+        const liq = lat.liq_ok;
+        const lev = lat.leverage || sum.coin_leverage;
+        const arbScans = sum.arb_scans != null ? sum.arb_scans : '—';
+        const decs = sum.decisions != null ? sum.decisions : '—';
+
+        const isArb = mode === 'arb';
+        const isTriggered = typeof mid === 'number' && mid >= need;
+
+        // Mode Pill
+        let modePill = '<span class="mode-pill none">未上线</span>';
+        if (mode === 'arb') {
+          modePill = '<span class="mode-pill arb">套利档</span>';
+        } else if (mode === 'volume') {
+          modePill = '<span class="mode-pill volume">刷量档</span>';
+        }
+
+        // Spread Bar
+        let spreadHtml = '—';
+        if (typeof mid === 'number' && mid > 0) {
+          const pct = Math.min(100, Math.max(0, (mid / MAX_BAR_BPS) * 100));
+          const triggerPct = (need / MAX_BAR_BPS) * 100;
+          const fillClass = isTriggered ? 'spread-bar-fill triggered' : 'spread-bar-fill';
+          const valClass = isTriggered ? 'spread-val triggered' : 'spread-val';
+          const diffText = (mid - need) >= 0 ? `+${(mid - need).toFixed(2)} bps` : `${(mid - need).toFixed(2)} bps`;
+
+          spreadHtml = `
+            <div class="spread-bar-wrap">
+              <div class="spread-bar-header">
+                <span class="${valClass}">${_fmtNum(mid, 2)} bps</span>
+                <span class="spread-trigger-sub">${diffText}</span>
+              </div>
+              <div class="spread-bar-track" title="当前: ${mid.toFixed(2)} bps / 阈值: ${need} bps">
+                <div class="${fillClass}" style="width: ${pct}%"></div>
+                <div class="spread-bar-trigger-line" style="left: ${triggerPct}%"></div>
+              </div>
+            </div>
+          `;
+        }
+
+        // Fund Diff display
+        let fundHtml = '—';
+        if (fundDiff != null && !isNaN(fundDiff)) {
+          // fund_diff in bps per 8h = fundDiff * 10000
+          const bps8h = fundDiff * 10000;
+          const sign = bps8h > 0 ? '+' : '';
+          const cls = bps8h > 0.001 ? 'pos' : (bps8h < -0.001 ? 'neg' : 'zero');
+          fundHtml = `
+            <div>
+              <div class="fund-val ${cls}">${sign}${bps8h.toFixed(2)} bps</div>
+              <div class="fund-raw">${fundDiff.toExponential(2)}</div>
+            </div>
+          `;
+        }
+
+        // Liq badge
+        const liqBadge = liq === true 
+          ? '<span class="liq-badge ok" title="流动性充足">✓</span>' 
+          : '<span class="liq-badge no" title="流动性不足">✗</span>';
+
+        const rowClass = isArb ? 'highlight-row' : '';
+
+        html += `
+          <tr class="${rowClass}">
+            <td>
+              <div class="symbol-cell">
+                <span class="symbol-name">${sym}</span>
+                <span class="symbol-pair">${sum.arcus_symbol || (sym + '-USD')} / ${sum.bybit_symbol || (sym + 'USDT')}</span>
+              </div>
+            </td>
+            <td>${modePill}</td>
+            <td>${spreadHtml}</td>
+            <td>${fundHtml}</td>
+            <td>${liqBadge}</td>
+            <td class="mono">${lev ? lev + 'x' : '—'}</td>
+            <td class="mono">${arbScans}</td>
+            <td class="mono font-bold" style="${decs > 0 ? 'color: #34d399; font-weight:700;' : ''}">${decs}</td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    // Render Native Canvas Spread Chart
+    function renderSpreadChart(series, universe, latest) {
+      const canvas = document.getElementById('spreadChartCanvas');
+      if (!canvas) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width || canvas.parentElement.clientWidth || 600;
+      const h = 240;
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      // Determine which symbols to draw
+      let symbolsToDraw = [];
+      if (selectedFilter === 'all') {
+        symbolsToDraw = universe.filter(s => series[s] && series[s].length > 0);
+      } else if (selectedFilter === 'arb') {
+        symbolsToDraw = universe.filter(s => {
+          const lat = latest[s] || {};
+          return lat.mode === 'arb' && series[s] && series[s].length > 0;
+        });
+        if (symbolsToDraw.length === 0) {
+          // Fallback to top 3 if none currently arb
+          symbolsToDraw = universe.slice(0, 3).filter(s => series[s] && series[s].length > 0);
+        }
+      } else {
+        symbolsToDraw = [selectedFilter].filter(s => series[s] && series[s].length > 0);
+      }
+
+      // Collect all points to find x/y extents
+      let allPoints = [];
+      let minMid = 0;
+      let maxMid = 25; // default scale
+      let timeMap = new Map(); // ISO -> index
+
+      symbolsToDraw.forEach(sym => {
+        (series[sym] || []).forEach(pt => {
+          if (typeof pt.mid === 'number' && pt.mid > 0) {
+            allPoints.push(pt);
+            if (pt.mid > maxMid) maxMid = pt.mid + 3;
+            timeMap.set(pt.t, true);
+          }
+        });
+      });
+
+      const sortedTimes = Array.from(timeMap.keys()).sort();
+
+      // Margins
+      const padLeft = 46;
+      const padRight = 18;
+      const padTop = 20;
+      const padBottom = 30;
+      const plotW = w - padLeft - padRight;
+      const plotH = h - padTop - padBottom;
+
+      // Clear
+      ctx.clearRect(0, 0, w, h);
+
+      // Background grid
+      ctx.strokeStyle = '#1a2333';
+      ctx.lineWidth = 1;
+      const yTicks = 4;
+      for (let i = 0; i <= yTicks; i++) {
+        const val = minMid + (maxMid - minMid) * (i / yTicks);
+        const y = padTop + plotH - (i / yTicks) * plotH;
+        ctx.beginPath();
+        ctx.moveTo(padLeft, y);
+        ctx.lineTo(padLeft + plotW, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--font-mono');
+        ctx.textAlign = 'right';
+        ctx.fillText(val.toFixed(0) + ' bps', padLeft - 6, y + 3);
+      }
+
+      // Draw Trigger Line (10.75 bps)
+      if (TRIGGER_BPS >= minMid && TRIGGER_BPS <= maxMid) {
+        const triggerY = padTop + plotH - ((TRIGGER_BPS - minMid) / (maxMid - minMid)) * plotH;
+        ctx.save();
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, triggerY);
+        ctx.lineTo(padLeft + plotW, triggerY);
+        ctx.stroke();
+
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--font-sans');
+        ctx.textAlign = 'right';
+        ctx.fillText('触发线 10.75 bps', padLeft + plotW, triggerY - 4);
+        ctx.restore();
+      }
+
+      // Time ticks on X axis
+      if (sortedTimes.length > 0) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--font-mono');
+        ctx.textAlign = 'center';
+
+        const step = Math.max(1, Math.floor(sortedTimes.length / 4));
+        for (let i = 0; i < sortedTimes.length; i += step) {
+          const t = sortedTimes[i];
+          const x = padLeft + (i / Math.max(1, sortedTimes.length - 1)) * plotW;
+          ctx.fillText(_formatTime(t), x, h - padBottom + 16);
+        }
+      }
+
+      // Draw series lines
+      symbolsToDraw.forEach((sym, sIdx) => {
+        const pts = series[sym] || [];
+        if (pts.length === 0) return;
+
+        const color = COLOR_PALETTE[sIdx % COLOR_PALETTE.length];
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        let started = false;
+        pts.forEach(pt => {
+          const tIdx = sortedTimes.indexOf(pt.t);
+          if (tIdx === -1 || typeof pt.mid !== 'number') return;
+          const x = padLeft + (tIdx / Math.max(1, sortedTimes.length - 1)) * plotW;
+          const y = padTop + plotH - ((pt.mid - minMid) / (maxMid - minMid)) * plotH;
+
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+
+        // Draw points
+        pts.forEach(pt => {
+          const tIdx = sortedTimes.indexOf(pt.t);
+          if (tIdx === -1 || typeof pt.mid !== 'number') return;
+          const x = padLeft + (tIdx / Math.max(1, sortedTimes.length - 1)) * plotW;
+          const y = padTop + plotH - ((pt.mid - minMid) / (maxMid - minMid)) * plotH;
+
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+
+      // Update Legend
+      const legendEl = document.getElementById('chartLegend');
+      let legHtml = '';
+      symbolsToDraw.forEach((sym, sIdx) => {
+        const color = COLOR_PALETTE[sIdx % COLOR_PALETTE.length];
+        const lat = latest[sym] || {};
+        const midStr = typeof lat.mid_bps === 'number' ? lat.mid_bps.toFixed(2) + ' bps' : '';
+        legHtml += `
+          <div class="legend-item" onclick="setChartFilter('${sym}')">
+            <span class="legend-dot" style="background: ${color}"></span>
+            <span>${sym}: <strong>${midStr}</strong></span>
+          </div>
+        `;
+      });
+      legendEl.innerHTML = legHtml;
+
+      // Update Filter Pills
+      updateFilterButtons(universe);
+    }
+
+    function updateFilterButtons(universe) {
+      const wrap = document.getElementById('chartFilterPills');
+      let html = `
+        <button class="pill-btn ${selectedFilter === 'all' ? 'active' : ''}" onclick="setChartFilter('all')">全部</button>
+        <button class="pill-btn ${selectedFilter === 'arb' ? 'active' : ''}" onclick="setChartFilter('arb')">仅套利</button>
+      `;
+      // Show top 3 symbols with data as quick buttons
+      const topSyms = ['NVDA', 'CRCL', 'QQQ', 'SPY'];
+      topSyms.forEach(sym => {
+        if (universe.includes(sym)) {
+          html += `<button class="pill-btn ${selectedFilter === sym ? 'active' : ''}" onclick="setChartFilter('${sym}')">${sym}</button>`;
+        }
+      });
+      wrap.innerHTML = html;
+    }
+
+    window.setChartFilter = function(filter) {
+      selectedFilter = filter;
+      if (signalsData) {
+        renderSpreadChart(signalsData.series || {}, signalsData.run.universe || [], signalsData.latest || {});
+      }
+    };
+
+    // Render Decisions
+    function renderDecisions(decisions) {
+      const container = document.getElementById('decisionsContainer');
+      const badge = document.getElementById('decisionBadgeCount');
+      badge.textContent = decisions.length;
+
+      if (!decisions || decisions.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无套利决策</div>';
+        return;
+      }
+
+      // Reverse chronological
+      const list = [...decisions].reverse();
+      let html = '';
+      list.forEach(d => {
+        const notional = d.notional_usd ? `$${Number(d.notional_usd).toFixed(2)}` : '—';
+        const edge = d.edge_bps ? `+${_fmtNum(d.edge_bps, 2)} bps` : '—';
+        const midBasis = d.mid_basis_bps ? `${_fmtNum(d.mid_basis_bps, 2)} bps` : '—';
+
+        const mainSide = (d.main_side || 'BUY').toUpperCase();
+        const hedgeSide = (d.hedge_side || 'SELL').toUpperCase();
+
+        html += `
+          <div class="decision-card">
+            <div class="decision-header">
+              <div class="dec-base">
+                <span>⚡</span> ${d.base || '—'}
+                <span class="dec-plan">${d.plan || 'arb'}</span>
+              </div>
+              <span class="dec-time">${_formatTime(d.ts)}</span>
+            </div>
+
+            <div class="dec-metrics">
+              <div class="dec-metric-item">
+                <span class="dec-metric-label">边际 (Edge)</span>
+                <span class="dec-metric-val text-green">${edge}</span>
+              </div>
+              <div class="dec-metric-item">
+                <span class="dec-metric-label">中间价差</span>
+                <span class="dec-metric-val">${midBasis}</span>
+              </div>
+              <div class="dec-metric-item">
+                <span class="dec-metric-label">名义价值</span>
+                <span class="dec-metric-val">${notional}</span>
+              </div>
+            </div>
+
+            <div class="dec-legs">
+              <div class="leg-box">
+                <div>
+                  <span class="text-dim">主腿: </span><strong>${(d.main_venue || 'Arcus').toUpperCase()}</strong>
+                </div>
+                <div>
+                  <span class="leg-tag ${mainSide === 'BUY' ? 'buy' : 'sell'}">${mainSide}</span>
+                  <span class="mono">$${_fmtNum(d.main_px, 2)}</span>
+                  <span class="text-dim">(${_fmtNum(d.main_qty, 3)})</span>
+                </div>
+              </div>
+
+              <div class="leg-box">
+                <div>
+                  <span class="text-dim">对冲: </span><strong>${(d.hedge_venue || 'Bybit').toUpperCase()}</strong>
+                </div>
+                <div>
+                  <span class="leg-tag ${hedgeSide === 'BUY' ? 'buy' : 'sell'}">${hedgeSide}</span>
+                  <span class="mono">$${_fmtNum(d.hedge_px, 2)}</span>
+                  <span class="text-dim">(${_fmtNum(d.hedge_qty, 3)})</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Render MTM
+    function renderMtm(mtm) {
+      const hero = document.getElementById('mtmHeroContainer');
+      const chartWrap = document.getElementById('mtmChartWrap');
+
+      if (!mtm || mtm.length === 0) {
+        hero.innerHTML = '<div class="empty-state">暂无持仓</div>';
+        chartWrap.style.display = 'none';
+        return;
+      }
+
+      chartWrap.style.display = 'block';
+
+      // Latest MTM
+      const latest = mtm[mtm.length - 1];
+      const pnl = latest.pnl_usd != null ? Number(latest.pnl_usd) : 0;
+      const pnlSign = pnl >= 0 ? '+' : '';
+      const pnlClass = pnl >= 0 ? 'pos' : 'neg';
+
+      const adv = latest.adverse_pct != null ? (Number(latest.adverse_pct) * 100).toFixed(4) + '%' : '—';
+      const hold = latest.hold_sec != null ? Number(latest.hold_sec).toFixed(1) + 's' : '—';
+      const basis = latest.mid_basis_bps != null ? Number(latest.mid_basis_bps).toFixed(2) + ' bps' : '—';
+      const base = latest.base || 'NVDA';
+
+      hero.innerHTML = `
+        <div class="mtm-hero">
+          <div class="mtm-item">
+            <span class="mtm-label">最新标的 / 持仓时间</span>
+            <span class="mtm-val">${base} · ${hold}</span>
+          </div>
+          <div class="mtm-item">
+            <span class="mtm-label">模拟盈亏 (USD)</span>
+            <span class="mtm-val mtm-pnl ${pnlClass}">${pnlSign}$${pnl.toFixed(4)}</span>
+          </div>
+          <div class="mtm-item">
+            <span class="mtm-label">最大不利偏离</span>
+            <span class="mtm-val">${adv}</span>
+          </div>
+          <div class="mtm-item">
+            <span class="mtm-label">基差 (Mid Basis)</span>
+            <span class="mtm-val">${basis}</span>
+          </div>
+        </div>
+      `;
+
+      // Draw Mini MTM Canvas Chart
+      drawMtmChart(mtm);
+    }
+
+    function drawMtmChart(mtm) {
+      const canvas = document.getElementById('mtmCanvas');
+      if (!canvas) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width || canvas.parentElement.clientWidth || 600;
+      const h = 160;
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const padLeft = 46;
+      const padRight = 18;
+      const padTop = 16;
+      const padBottom = 26;
+      const plotW = w - padLeft - padRight;
+      const plotH = h - padTop - padBottom;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const vals = mtm.map(m => Number(m.pnl_usd || 0));
+      let minP = Math.min(0, ...vals);
+      let maxP = Math.max(0.05, ...vals);
+      const range = (maxP - minP) || 0.1;
+
+      // Zero line
+      const zeroY = padTop + plotH - ((0 - minP) / range) * plotH;
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padLeft, zeroY);
+      ctx.lineTo(padLeft + plotW, zeroY);
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--font-mono');
+      ctx.textAlign = 'right';
+      ctx.fillText('$0.00', padLeft - 6, zeroY + 3);
+
+      // Y max
+      ctx.fillText(`+$${maxP.toFixed(2)}`, padLeft - 6, padTop + 10);
+
+      // Draw PnL Line
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      mtm.forEach((m, idx) => {
+        const val = Number(m.pnl_usd || 0);
+        const x = padLeft + (idx / Math.max(1, mtm.length - 1)) * plotW;
+        const y = padTop + plotH - ((val - minP) / range) * plotH;
+
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Points
+      mtm.forEach((m, idx) => {
+        const val = Number(m.pnl_usd || 0);
+        const x = padLeft + (idx / Math.max(1, mtm.length - 1)) * plotW;
+        const y = padTop + plotH - ((val - minP) / range) * plotH;
+
+        ctx.fillStyle = val >= 0 ? '#34d399' : '#f87171';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Time label below
+        ctx.fillStyle = '#64748b';
+        ctx.textAlign = 'center';
+        ctx.fillText(_formatTime(m.ts), x, h - padBottom + 16);
+      });
+    }
+
+    // Refresh controls & Live ticker
+    document.getElementById('btnRefresh').addEventListener('click', loadData);
+
+    // Dynamic elapsed ticker
+    setInterval(() => {
+      if (signalsData && signalsData.run && signalsData.run.started) {
+        document.getElementById('metaDuration').textContent = _formatDuration(signalsData.run.started);
+      }
+      // Countdown
+      countdownSec--;
+      if (countdownSec <= 0) {
+        loadData();
+      } else {
+        document.getElementById('countdownPill').textContent = `${countdownSec}s 刷新`;
+      }
+    }, 1000);
+
+    // Initial load
+    window.addEventListener('DOMContentLoaded', loadData);
+    window.addEventListener('resize', () => {
+      if (signalsData) {
+        renderSpreadChart(signalsData.series || {}, signalsData.run.universe || [], signalsData.latest || {});
+        renderMtm(signalsData.mtm || []);
+      }
+    });
+  </script>
+</body>
+</html>
