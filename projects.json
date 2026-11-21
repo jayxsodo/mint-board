@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-21T19:27:45+08:00",
+    "updatedAt": "2026-11-21T19:59:15+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -195,6 +195,21 @@
             "taxPct": 2.5,
             "startAt": "2026-11-21T20:00:00+08:00",
             "endAt": "2026-11-21T22:00:00+08:00",
+            "progressFn": "totalLotsMinted",
+            "openedFn": "poolOpen",
+            "sync": true
+        },
+        {
+            "id": "pat",
+            "name": "Predict Agent",
+            "token": "0x92C8Be25004899EaeA931E2B3059E27f11a6674E",
+            "sale": "0x92C8Be25004899EaeA931E2B3059E27f11a6674E",
+            "pricePerShare": 0.004,
+            "tokensPerShare": 100000,
+            "totalShares": 10000,
+            "taxPct": 3,
+            "startAt": "2026-11-21T22:30:00+08:00",
+            "endAt": "",
             "progressFn": "totalLotsMinted",
             "openedFn": "poolOpen",
             "sync": true
