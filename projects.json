@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-18T16:57:26+08:00",
+    "updatedAt": "2026-11-21T19:27:45+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -182,6 +182,21 @@
             "endAt": "",
             "progressFn": "minted",
             "openedFn": "launched",
+            "sync": true
+        },
+        {
+            "id": "ember",
+            "name": "Ember \u4f59\u70ec",
+            "token": "0x91F40882f5D952928552e8C861409AaA7459F895",
+            "sale": "0x91F40882f5D952928552e8C861409AaA7459F895",
+            "pricePerShare": 0.004,
+            "tokensPerShare": 12500,
+            "totalShares": 8000,
+            "taxPct": 2.5,
+            "startAt": "2026-11-21T20:00:00+08:00",
+            "endAt": "2026-11-21T22:00:00+08:00",
+            "progressFn": "totalLotsMinted",
+            "openedFn": "poolOpen",
             "sync": true
         }
     ]
