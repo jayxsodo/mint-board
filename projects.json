@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-21T21:57:57+08:00",
+    "updatedAt": "2026-11-21T23:59:12+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -194,7 +194,7 @@
             "totalShares": 10000,
             "taxPct": 3,
             "startAt": "2026-11-21T22:30:00+08:00",
-            "endAt": "",
+            "endAt": "2026-11-22T22:38:21+08:00",
             "progressFn": "totalLotsMinted",
             "openedFn": "poolOpen",
             "sync": true
