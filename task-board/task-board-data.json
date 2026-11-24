@@ -1,0 +1,923 @@
+{
+  "arbitrage": {
+    "lines": [
+      {
+        "detail": "17 轮、约 283,677 轮、0 命中；审计：图搜索有真 bug（ETH 113 池中 17 个流动性为 0，幻影环占满提案），但深池三角直接算过（借 $1,000 亏 $1.04），0 命中是市场事实",
+        "name": "多链多跳原子（Phase-2）",
+        "next": "深度过滤修法（踢掉流动性 0 与 <$2,000 池 + 价格 sanity guard）待他定是否加；Mac 扫描器随 11-24 14:17 重启死亡，重起待他定",
+        "numbers": {
+          "candidates": "0",
+          "hit_min": "$5",
+          "rounds": "283,677"
+        },
+        "status": "stopped",
+        "status_label": "已停纸面验证",
+        "updated": "2026-11-24 19:00"
+      },
+      {
+        "detail": "v3 按 $100 跑：20.6 小时、610 笔平仓，已实现 -$9.18；收敛 289 笔 +$7.97 是唯一赚钱出场；时间止损 116 笔 -$7.87、硬止损 96 笔 -$6.89 是两大漏钱口；出场侧已到头，漏钱在开仓侧",
+        "name": "Taoli 对冲翻单 v3",
+        "next": "重起待他定；v1 的数以后不报",
+        "numbers": {
+          "capital": "$100",
+          "realized": "-$9.18",
+          "trades": "610"
+        },
+        "status": "stopped",
+        "status_label": "检测器已死（Mac 重启）",
+        "updated": "2026-11-24 08:30"
+      },
+      {
+        "detail": "SOL 空 18.56197 @69.9954（止损 72.9333、止盈 64.1197）；v2 首轮即见效：cross 平 -$2.19 后没有立即重开",
+        "name": "Quote.Trade AlphaLeague Paper v2",
+        "next": "每 15 分钟跑、2 小时巡检；改真实挂单+冷却规则待他点头",
+        "numbers": {
+          "equity": "$1,090.65 (+9.06%)",
+          "realized": "+$110.62（9 笔）",
+          "season_end": "12-31"
+        },
+        "status": "active",
+        "status_label": "v2 运行中（法兰克福）",
+        "updated": "2026-11-24 23:24"
+      },
+      {
+        "detail": "只报 7 天均值差 ≥0.05%/8h 且当前差不低于均值的组合；INIT 已停（11-23 02:44），7 笔回测 +22.39% 样本小不值得加仓",
+        "name": "资金费率 F4",
+        "next": "等 INIT 式机会",
+        "numbers": {
+          "alerts": "0 在途"
+        },
+        "status": "active",
+        "status_label": "每小时扫描",
+        "updated": "2026-11-24"
+      },
+      {
+        "detail": "ZRO 解锁盯守：12-20 与 2027-01-19 各解锁 23,625,000 ZRO（约 $27.64M），解锁/ADV 约 0.5007x；只看不做",
+        "name": "发现平台（E1/P1/CEX）",
+        "next": "机会雷达每 6 小时",
+        "numbers": {
+          "cex": "每 10 分钟",
+          "e1": "每日 02:00 UTC",
+          "p1": "每小时"
+        },
+        "status": "active",
+        "status_label": "E1 每日 / P1 每小时 / CEX 每 10 分钟",
+        "updated": "2026-11-23"
+      },
+      {
+        "detail": "88 池 38 对、3 秒一轮，0 PASS；常驻溢价均不是钱：HYPE/USDC +11.2% 是薄池幻影（$10 净 −67%）；KNTQ 跨链 +1.81% 未过 1% 线",
+        "name": "pool-premium 跨池溢价",
+        "next": "重起待他定；v1.5 待修 crossed_tick 标记偏敏感",
+        "numbers": {
+          "pairs": "38",
+          "pass": "0",
+          "pools": "88"
+        },
+        "status": "stopped",
+        "status_label": "Mac 扫描器随重启死亡",
+        "updated": "2026-11-18"
+      },
+      {
+        "detail": "34 个候选、0 过审、0 PASS，全是灰尘/骗子盘；GoPlus 免费 API 作主税检查",
+        "name": "thin-scan 薄币原子 Phase 1",
+        "next": "先跑 1–2 周看数据再定 Phase 2",
+        "numbers": {
+          "candidates": "34",
+          "passed": "0"
+        },
+        "status": "active",
+        "status_label": "只发现、不动钱",
+        "updated": "2026-11-18"
+      },
+      {
+        "detail": "32 小时共 14,316 条报警，深度 ≥$500 且净利 ≥0.5% 的 2,201 条；但一个价差 32 小时一直存在、没被市场抹平，提示可能不可执行，监控从没实盘验证过",
+        "name": "Altare ws 价差监控",
+        "next": "要不要继续跑、要不要试单，等他定",
+        "numbers": {
+          "alerts": "14,316",
+          "paper_trader": "v2 活到 11-23 12:57",
+          "qualified": "2,201"
+        },
+        "status": "attention",
+        "status_label": "三进程只跑了约 32 小时就停了",
+        "updated": "2026-11-24"
+      },
+      {
+        "detail": "62,456 笔：表面 +$2,040.03、胜率 74%，全是冻住价格的幻影；带新鲜报价的 29,232 笔净 -$226.46、胜率 52.8%；RAY 是最大幻影源（17,382 笔、+$1,097.32）",
+        "name": "BAW Solana 影子机器人",
+        "next": "影子仍在跑，等他定停不停；旧机器人保持停机，别重启",
+        "numbers": {
+          "cpu": "占 VPS 41%",
+          "paper": "+$2,040.03",
+          "real_quotes": "-$226.46"
+        },
+        "status": "attention",
+        "status_label": "6 天复核：不能盈利",
+        "updated": "2026-11-23"
+      },
+      {
+        "detail": "触发线 ±8% 双读确认；热钱包 0x211f…4cC7C 待注资 0.75 HYPE，钱包总价值封顶 $75 写死",
+        "name": "Elysium KNTQ 价差",
+        "next": "注资待他签名执行",
+        "numbers": {
+          "cap": "$75"
+        },
+        "status": "waiting",
+        "status_label": "热钱包待注资",
+        "updated": "2026-11-10"
+      },
+      {
+        "detail": "PerpFinder API + Loris 回测器 + CoinBeacon 免费报警 + SpreadScan 免卡试用；结论：大币种跨所价差/资金费扣费后基本不赚钱",
+        "name": "套利发现平台汇总",
+        "next": "什么都别先付费、密钥钱包别接",
+        "numbers": {
+          "paid": "0"
+        },
+        "status": "active",
+        "status_label": "免费工具可用，别先付费",
+        "updated": "2026-11-24"
+      }
+    ],
+    "note": "只扫纸面不投入；真投时再按风险筛。执行走热钱包直签，不走 BAW（BAW 只打新）。",
+    "title": "套利控制台",
+    "verdict": "11-24 诊断结论：$5 门槛从来不是瓶颈，这个池子宇宙里根本不存在可执行的原子套利边，哪怕 1 分钱都没有。"
+  },
+  "categories": [
+    {
+      "id": "mint",
+      "name": "打新 / Mint",
+      "note": "免费自动打已于 2026-11-17 停用，等他令恢复；心跳 boltbook-heartbeat disabled",
+      "projects": [
+        {
+          "chain": "BSC",
+          "deadline": "长止损 2026-12-07 19:30",
+          "detail": "烧 1 张换 50,000 APANDA；质押 500/天/张，无锁定",
+          "goal": "agent-panda-nfts",
+          "holdings": "NFT #9499 #9531（免费 2/2 已用完）",
+          "name": "Agent Panda / $APANDA",
+          "next": "等真开池（计价侧 ≥1 BNB 才算），开池当轮报烧卡卖币 vs 质押对比",
+          "progress": null,
+          "progress_label": "未开池",
+          "status": "active",
+          "watch": "panda-pool-watch 每 5 分钟"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "pos23 到期 11-25 10:08:57",
+          "detail": "现价 $1.34e-6（11-24 17:45），11-22 $1.55e-6 → 11-23 $1.80e-6 → 一路走低",
+          "goal": "agcc-daily-claim-and-mint",
+          "holdings": "AW：AGC 1,836,268，BNB 0.0120",
+          "name": "AGCC / AGC",
+          "next": "11-25 09:55 领 pos23 再续挖",
+          "progress": null,
+          "progress_label": "每日自动运转",
+          "status": "active",
+          "watch": "agcc-daily-claim-mint 每日 09:55；币价早晚报 09:00/21:00"
+        },
+        {
+          "chain": "Robinhood 4663",
+          "deadline": "无官方时间",
+          "detail": "官网 pixelora.fun；创世地块 OpenSea 地板 $0.70→$0.99；Starter island 约 $1",
+          "goal": "pixelora-01-30",
+          "holdings": "热钱包 0x2309…F65D 已充 0.00085 ETH",
+          "name": "Pixelora / $PIXO",
+          "next": "等农场开服 / $PIXO 上线；地块地板 $0.99（0.0006 ETH，+41%）",
+          "progress": 10,
+          "progress_label": "农场锁定，$PIXO 未上线",
+          "status": "active",
+          "watch": "01:35 复查：01:30 开服未兑现"
+        },
+        {
+          "chain": "HyperEVM",
+          "deadline": "白名单首开 11-25 20:00；徽章开 mint 11-26 20:00；全开 12-02",
+          "detail": "每包 0.3 HYPE；徽章权益仅提前 6 天，无折扣",
+          "goal": "oripa-whitelist-raffle-decision",
+          "holdings": "#early 已用 jayx@muse.ai 报名",
+          "name": "Oripa / ORIPA",
+          "next": "等抽签邮件；11-26 19:55 锁 Early Bird 徽章（只付 gas）",
+          "progress": 40,
+          "progress_label": "#early 已报名，待抽签",
+          "status": "active",
+          "watch": "抽签 11-25；徽章提醒 11-26 19:55"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "2026-11-27",
+          "detail": "主 NFT 付费不推荐（无退款、分成造假）",
+          "goal": "moribundus-mori-2219-claim-and-unlock",
+          "holdings": "未领",
+          "name": "MORFO",
+          "next": "主聊回「mint」先跑免费卡 preview（灵魂绑定、不可转让、纯收藏）",
+          "progress": 5,
+          "progress_label": "免费卡 1,345/25,000",
+          "status": "active",
+          "watch": "窗口至 11-27"
+        },
+        {
+          "chain": "Bitcoin RGB",
+          "deadline": "公开轮 11-27 01:20 北京时间",
+          "detail": "免费 0 BTC；确认时收 0.000018 BTC Sealing Fee",
+          "goal": "rgbstone-public-mint",
+          "holdings": "未 mint",
+          "name": "RGBStone",
+          "next": "须他本人钱包操作：mint 页 Sign in 查资格，选 With balance",
+          "progress": 35,
+          "progress_label": "已铸 3,122/9,000",
+          "status": "waiting",
+          "watch": "白名单轮进行中，剩 5,870"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "2026-11-27 20:45",
+          "detail": "付款直转项目钱包，无退款、无建池计划",
+          "goal": "agent",
+          "holdings": "AW 0 份（11-23 丢单）",
+          "name": "Antopia / ANTZ",
+          "next": "只剩付费 0.00088 BNB/包，不推荐；等发售结束结案",
+          "progress": 100,
+          "progress_label": "免费 4,000 份已抢完",
+          "status": "active",
+          "watch": "发售至 11-27 20:45"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "总量 4,444，每钱包 1 枚、只花 gas；4 份合约均未验证",
+          "goal": "synape-2-mint",
+          "holdings": "免费 GENESIS NFT 1 枚待领",
+          "name": "SYNTHGENESIS",
+          "next": "等他回「mint」再跑 preview",
+          "progress": 50,
+          "progress_label": "mintOpen=1，AW 未领",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "已过",
+          "detail": "两合约均未验证、无退款；买卖税各 2.5%",
+          "goal": "agent",
+          "holdings": "未打",
+          "name": "BLKH",
+          "next": "回「mint」先跑 preview；只剩付费首档 0.005 BNB/份",
+          "progress": 31,
+          "progress_label": "约 3,062–3,091/10,000",
+          "status": "waiting",
+          "watch": "售罄或 11-23 19:00 自动开池（终局未核）"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "总量 3,333，首张免费、之后 0.001 BNB/张、上限 10 张；合约已验证干净",
+          "goal": "agent",
+          "holdings": "免费首张未用",
+          "name": "bucket",
+          "next": "等他回「mint」再跑 preview",
+          "progress": 12,
+          "progress_label": "已铸 385/3,333",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "总量 9,999，免费每钱包 2 张；owner 可改价/改 URI/提款",
+          "goal": "agent",
+          "holdings": "免费 2 张可用",
+          "name": "MECHA",
+          "next": "等他回「mint」；只领免费，付费不建议",
+          "progress": 4,
+          "progress_label": "已铸 357/9,999",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "每钱包第 1 只免费，第 2、3 只各 0.0003 BNB；10 万 ZEPH 只是文案承诺、链上无此币",
+          "goal": "agent",
+          "holdings": "首只免费未领",
+          "name": "Zephyra / ZEPH",
+          "next": "等他回「mint」再 preview",
+          "progress": 14,
+          "progress_label": "已铸 466/3,333",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "前 7,777 份免费，之后 1 USDT/份；owner 可改价/改手续费/暂停",
+          "goal": "agent",
+          "holdings": "免费额度 2 份未用",
+          "name": "WUMPO",
+          "next": "等他回「mint」再 preview；免费不是零成本，每份另收约 0.000285 BNB 手续费",
+          "progress": 9,
+          "progress_label": "已售 955/11,110",
+          "status": "waiting",
+          "watch": "节奏极慢"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "双路核实 claimableNow=1、claimed=0",
+          "goal": "boltbook-community-and-bolt-rewards",
+          "holdings": "Plots #330",
+          "name": "Urbanova / $URBN",
+          "next": "等他定；领了也卖不掉（无池、现值 $0），手续费 0.00035221 BNB",
+          "progress": 100,
+          "progress_label": "可领 60,000 $URBN",
+          "status": "waiting",
+          "watch": "无截止"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "已关闭",
+          "detail": "44 阶段×10,000 份、0.004 BNB/份；双合约 exact_match",
+          "goal": "agent",
+          "holdings": "AW 有 Agent ID 1 个",
+          "name": "Predict Agent / PAT",
+          "next": "他不回即不打；结论不推荐（LP 只锁 30 天）",
+          "progress": 1,
+          "progress_label": "stage1 终值 63/10,000 已关闭",
+          "status": "waiting",
+          "watch": "决定卡已发等点"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "开盘 11-15 20:00，售罄或 24h 后开池",
+          "goal": "piagent-pi-free-share",
+          "holdings": "AW Pi 901,400",
+          "name": "PiAgent / Pi",
+          "next": "付费不推荐（无退款）；buy 5 份 calldata 已备，等他定",
+          "progress": 100,
+          "progress_label": "免费已领 901,400 π；付费 182/7,000",
+          "status": "waiting",
+          "watch": "池未开"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "三合约均 exact_match",
+          "goal": "agent",
+          "holdings": "SPEC #288 #1523 #2573；#288 已领 250,000 $LAB",
+          "name": "AgentLabs SPEC / $LAB",
+          "next": "#1523 的 1,000,000 $LAB 已可领，等他定；开池即卖",
+          "progress": 50,
+          "progress_label": "$LAB 无池、现值 $0",
+          "status": "waiting",
+          "watch": "已记 pending 清单"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": ".ai 门控 BSC 宠物游戏",
+          "goal": "anthrobit-genesis",
+          "holdings": "未领",
+          "name": "AnthroBit Genesis",
+          "next": "等他令恢复",
+          "progress": 50,
+          "progress_label": "每日免费首铸 cron 已暂停",
+          "status": "waiting",
+          "watch": "anthrobit-daily-free-mint disabled"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "11-21 11:00 轮：XIA 590/1,111；CappyBNB 免费 467/555；RONAGENT 1,378",
+          "goal": "ai-mint-opening-intel",
+          "holdings": "AW #427",
+          "name": "AgentMint / AMINT",
+          "next": "继续盯",
+          "progress": 43,
+          "progress_label": "428/1,000",
+          "status": "active",
+          "watch": "agent-mint-watch 每小时"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "LeafCurve 公式价约 0.0001 BNB，但合约实际仅 1 wei BNB，现卖=0",
+          "goal": "agent-grove-leaf-holding",
+          "holdings": "免费树 #1955；LEAF 45.9383",
+          "name": "LEAF / Agent Grove",
+          "next": "储备 ≥0.05 BNB 时自动卖出（只在真卖出时报）",
+          "progress": 100,
+          "progress_label": "LEAF 45.9383，曲线储备 <0.05 BNB",
+          "status": "active",
+          "watch": "心跳每轮静默查储备"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "开盘 11-17 20:00，3,888 份满开池",
+          "goal": "agent",
+          "holdings": "免费 1 份已领",
+          "name": "CH.AGT",
+          "next": "等开池再 claim()",
+          "progress": 100,
+          "progress_label": "已领，余额 0（开池才发币）",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "无",
+          "detail": "三阶段须他本人操作，心跳代不了",
+          "goal": "strawbs-wake-participation",
+          "holdings": "Genesis #751",
+          "name": "STRAWBS WAKE",
+          "next": "须他本人官网设 default agent password + 解信号碎片 + EIP-712 签名",
+          "progress": 30,
+          "progress_label": "WAKE 已开门",
+          "status": "waiting",
+          "watch": "无"
+        }
+      ]
+    },
+    {
+      "id": "airdrop",
+      "name": "空投",
+      "note": "指挥站旁聊 83ac71e6；截止提醒只报他参与过/有持仓/有资格的项目",
+      "projects": [
+        {
+          "chain": "测试网",
+          "deadline": "无",
+          "detail": "ASEFlip 他已自己打完；验证者未上（须他定）",
+          "goal": "asentum-testnet-xp-wallet-linking-and-faucet-swap",
+          "holdings": "连签 11 天；钱包 638.47 ASE",
+          "name": "Asentum",
+          "next": "每日任务照做；AnotherShooter（+30）仍未做；X 分享任务已放弃",
+          "progress": 65,
+          "progress_label": "XP 2,236.92，排名 #40,999",
+          "status": "active",
+          "watch": "asentum-daily-quest-reminder 每日；水龙头 5 ASE/6h"
+        },
+        {
+          "chain": "LitVM LiteForge 测试网",
+          "deadline": "Token Quest 截止 11-30 14:00 UTC；Epoch 4 快照 2027-01-10",
+          "detail": "Bonus Epoch 是最后一期；Discord +200 他定跳过",
+          "goal": "aura-protocol",
+          "holdings": "AURA/REV/HDX/ORBT 各 10 枚质押 30 天；Kinetix 1.65 KTX、AegisCore 3 ACR",
+          "name": "Aura Protocol",
+          "next": "11-25 复核 7 天连签 +320 是否到账；/airdrop 页显示 0 分属快照时才定",
+          "progress": 85,
+          "progress_label": "21,005 分，已过 10,000 门槛",
+          "status": "active",
+          "watch": "aura-daily-claim 每日 08:05"
+        },
+        {
+          "chain": "flop_testnet",
+          "deadline": "activation block 待公布；主网/TGE 无日期",
+          "detail": "创世哈希 0x918abd…；devnet 彩排：领币/开户通、推理 6 次全 503",
+          "goal": "flop-testnet-opening-watch",
+          "holdings": "验证者候选已注册 issue #928，Team ID Jayx；agent DID 授权至 12-24",
+          "name": "FLOP",
+          "next": "等签名版 Testnet kit 再生成 session key/签名（现在不要签）；activation block 公布后是否另设盯守待他定；验证者租机待他定",
+          "progress": 60,
+          "progress_label": "测试网已上线（未计分）",
+          "status": "active",
+          "watch": "flop-testnet-watch 已删；授权检查提醒 12-20 10:00"
+        },
+        {
+          "chain": "Optimism + Robinhood",
+          "deadline": "2026-11-25 07:59",
+          "detail": "Mac 矿工 11-24 约 14:22 起离线（疑睡眠），不影响领取",
+          "goal": "zxoxo-free-mining-on-mac",
+          "holdings": "OP 34.58 已领+已发包（×1.25≈43.23）；HOOD 23.73 已领（按 1 倍）",
+          "name": "ZXOXO",
+          "next": "HOOD 包已定不发；快照后无事可做，等结果",
+          "progress": 95,
+          "progress_label": "Season 1 快照 11-25 07:59，最终约 66.96",
+          "status": "active",
+          "watch": "快照 11-25 07:59"
+        },
+        {
+          "chain": "脚本代领",
+          "deadline": "session cookie 12-04 到期；提醒 12-03 09:00",
+          "detail": "claimable <1 只预约不入账、满 1 自动入账",
+          "goal": "dhorse-genesis",
+          "holdings": "每日 07:30/19:30 自动领+签到",
+          "name": "DHORSE Genesis",
+          "next": "12-03 前让他给新 session；结案时删脚本与 cookie",
+          "progress": 70,
+          "progress_label": "积分约 1,329",
+          "status": "active",
+          "watch": "dhorse-genesis-script-claim 每 12h（+补领）"
+        },
+        {
+          "chain": "Base Sepolia 测试网",
+          "deadline": "主网 11-30",
+          "detail": "只动测试网、不花真钱、不签主网交易",
+          "goal": "tzero-testnet-season-0-points",
+          "holdings": "MetaMask Account 4 0x7704…ccDb；Signal 码 T0-132FCCDB",
+          "name": "Tzero / $T0",
+          "next": "水龙头只凑到 0.002 ETH，不够 Crew 的 0.01；X 回帖+关注须他本人做",
+          "progress": 0,
+          "progress_label": "积分 0/500（差 500 才合格）",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BNB",
+          "deadline": "无",
+          "detail": "免费档：签到 10–70 XP/天、社交任务 50 XP/项；花钱档别碰；官方未官宣代币/空投",
+          "goal": "agent",
+          "holdings": "无",
+          "name": "Dow Protocol / DOW Points",
+          "next": "等他定要不要试手机打开（云端打开显示地区限制）",
+          "progress": 0,
+          "progress_label": "未注册",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "TGE 与截止均未公布",
+          "detail": "首包免费；官网未找到代币合约地址",
+          "goal": "agent",
+          "holdings": "无",
+          "name": "MemeBitcoin / $MBTC",
+          "next": "等他定；第二包最现实是填钱包地址",
+          "progress": 0,
+          "progress_label": "未领、未注册",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "agent.family",
+          "deadline": "2026-11-30",
+          "detail": "活动要求连 AW，AW 私钥币安从未导出",
+          "goal": "agent",
+          "holdings": "什么都没装、没连钱包",
+          "name": "TermiX Skills 50 TP",
+          "next": "等他定：只剩币安官方授权路线（不碰私钥）一种可能",
+          "progress": 0,
+          "progress_label": "隔离路线死锁",
+          "status": "waiting",
+          "watch": "无"
+        },
+        {
+          "chain": "GPU 测试网",
+          "deadline": "无",
+          "detail": "唯一路 Vast 租 3090 约 $16–31",
+          "goal": "vearl",
+          "holdings": "无",
+          "name": "Vearl",
+          "next": "主网上线后复盘",
+          "progress": 0,
+          "progress_label": "已定跳过",
+          "status": "closed",
+          "watch": "主网上线后复盘"
+        }
+      ]
+    },
+    {
+      "id": "makefun",
+      "name": "make.fun 赏金",
+      "note": "质量铁律（11-24 他定）：每场百分之百努力争名次，做不到水准宁可不参加；账号 @eager-condor-38",
+      "projects": [
+        {
+          "chain": "make.fun",
+          "deadline": "见各场",
+          "detail": "11-24 23:58 又交 2 场一句话赛（各 $2 赢家通吃）",
+          "goal": "makefun-btc-24-hour-race-11-23-dip-bounce-cbbtc-bot",
+          "holdings": "food-picture-01（~11-29）；news-image-01（12-04）；best-game-01 v2（12-03）；threejs-fps-02 重交版；markdown-02（12-01）；ai-excited-01（12-01）；coin-promo-01 $TROPHY（12-01）；btc-race-24h（最晚 12-10）；csv-reader-01（12-08）；双 agent 诗（12-05）；token-radar-01 radar-5（12-28）",
+          "name": "在途提交（9 场）",
+          "next": "github-core-clone Go 版等 scored draw（我方 493 名 943 分；老婆 Mac 号 51 名 954 分）",
+          "progress": 60,
+          "progress_label": "等出结果",
+          "status": "active",
+          "watch": "makefun-new-competition-scan 每 30 分钟"
+        },
+        {
+          "chain": "make.fun",
+          "deadline": "pump.fun 回放截止 11-26 04:00",
+          "detail": "9 场均已建好；Pump Sprint 本地练习 −0.20 SOL，同样亏",
+          "goal": "make-fun-0-50-entry-fee-competitions",
+          "holdings": "参赛钱包 USDC 0、只有 0.0276 SOL，不够付 $4.50",
+          "name": "$0.50 报名费场（9 场）",
+          "next": "须他往钱包转 $5 USDC；pump.fun 回放本地练习仍亏 −0.387 SOL，未提交",
+          "progress": 40,
+          "progress_label": "钱包钱不够",
+          "status": "attention",
+          "watch": "无"
+        },
+        {
+          "chain": "make.fun",
+          "deadline": "已过",
+          "detail": "Vibe 会话拉起，约 14.5 小时+6×1.5 小时，占满 Mac CPU",
+          "goal": "makefun-tiny-chess-01-second-round-optimization",
+          "holdings": "无提交",
+          "name": "tiny-chess-01",
+          "next": "Mac 上 7 个象棋进程仍在跑（solve.mjs + sweep_hi.mjs×6），等他点停不停",
+          "progress": 100,
+          "progress_label": "do-not-submit（天花板 ~1190 Elo）",
+          "status": "attention",
+          "watch": "截止 11-24 17:00 UTC 已过"
+        },
+        {
+          "chain": "make.fun",
+          "deadline": "已过",
+          "detail": "开发者分 529/11,498",
+          "goal": "makefun-gta6-01-entry",
+          "holdings": "commit 2243d9e9",
+          "name": "gta6-01",
+          "next": "待旁聊会话收尾后密封录制再提交",
+          "progress": 90,
+          "progress_label": "第三轮建完，待密封提交",
+          "status": "attention",
+          "watch": "截止 11-24 23:00"
+        }
+      ]
+    },
+    {
+      "id": "infra",
+      "name": "基础设施 / 盯守",
+      "note": "VM 约每 2 小时换一台；登记项只剩 BSC 代理 + baw",
+      "projects": [
+        {
+          "chain": "本 VM",
+          "deadline": "无",
+          "detail": "BrokenPipeError 新机累计 179；NodeReal key1 停放至 12-01，Ankr 新 key 401",
+          "goal": "vps",
+          "holdings": "AW 0.01202438 BNB / nonce 1468（双路一致）",
+          "name": "VM 看门狗",
+          "next": "出口断流 11-24/25 已 16 波（最新 03:07 第 16 波进行中）；代理无损",
+          "progress": null,
+          "progress_label": "当前 VM 01:33:38 开机（032ec0f8）",
+          "status": "active",
+          "watch": "vm-watchdog-supervisor 每 5 分钟"
+        },
+        {
+          "chain": "BSC",
+          "deadline": "12-01 NodeReal key1 / Ankr 旧账号解封复核",
+          "detail": "GetBlock 402、Ankr 401 为已知状态",
+          "goal": "chainstack-backup-rpc-onboarding",
+          "holdings": "上游 Chainstack → NodeReal2 → GetBlock → Ankr",
+          "name": "BSC RPC 代理",
+          "next": "无动作",
+          "progress": null,
+          "progress_label": "/health ok，in_rotation 8–12",
+          "status": "active",
+          "watch": "看门狗每 5 分钟"
+        },
+        {
+          "chain": "45.76.80.16",
+          "deadline": "免费期至 2027-10-01",
+          "detail": "磁盘剩 3.5G；REALITY 已死",
+          "goal": "vps",
+          "holdings": "Hy2 + VLESS；Quote 量化、影子机器人、看板中继 :8443",
+          "name": "法兰克福 VPS",
+          "next": "超 1.5 TB 才报警；load 约 4（1 核机偏高）",
+          "progress": 33,
+          "progress_label": "11 月流量约 510 GiB / 1.5 TB 阈值",
+          "status": "active",
+          "watch": "fra-bandwidth-watch 每日 09:00"
+        },
+        {
+          "chain": "JustVPS 882816-218297",
+          "deadline": "付费期 11-14 结束",
+          "detail": "VPN 没死（Hy2 法兰克福、GCP VLESS）",
+          "goal": "backup-vps-for-vpn-redundancy",
+          "holdings": "备份已验（160MB，sha256 已核对，Drive 有副本）",
+          "name": "207 VPS（摄影站）",
+          "next": "等他点选：续费 $5.06 或搬家（法兰克福/GCP/Altare）",
+          "progress": 0,
+          "progress_label": "已停，站已宕",
+          "status": "attention",
+          "watch": "无"
+        },
+        {
+          "chain": "BSC .ai",
+          "deadline": "无",
+          "detail": "11-21 11:00 轮：Contextgraph Graph 5 255 节点、AW 未铸",
+          "goal": "ai-mint-opening-intel",
+          "holdings": "投旁聊 00541314",
+          "name": "Mint 监控",
+          "next": "继续盯；BSC 新盘报警已暂停（disabled，等他通知恢复）",
+          "progress": null,
+          "progress_label": "每小时一轮",
+          "status": "active",
+          "watch": "agent-mint-watch 每小时"
+        },
+        {
+          "chain": "GCP 35.212.201.216:8788",
+          "deadline": "无",
+          "detail": "未配 Telegram/AI Key/FlareSolverr",
+          "goal": "goal-4",
+          "holdings": "空投/撸毛/挖矿补充源",
+          "name": "Freebie Radar",
+          "next": "继续读",
+          "progress": null,
+          "progress_label": "自部署在 GCP，743 条",
+          "status": "active",
+          "watch": "freebie-radar-hourly-check 每小时；日扫 09:00"
+        },
+        {
+          "chain": "Drive 同步",
+          "deadline": "今晚 23:44 v24",
+          "detail": "供他连不上 Muse 时交接用，不含密钥",
+          "goal": "agent",
+          "holdings": "手册 + MEMORY 备份双文件",
+          "name": "打新交接手册",
+          "next": "v24 须带入：AGCC 11-25 轮、换机、断流、FLOP 上线、Quote v2、Mac 重启、Oripa cron 修复、ZXOXO、象棋进程",
+          "progress": null,
+          "progress_label": "v23 已交付",
+          "status": "active",
+          "watch": "wallet-handbook-daily-update 每日 23:44"
+        },
+        {
+          "chain": "Colab Pro（余额 426 单位）",
+          "deadline": "无",
+          "detail": "11-14 他定第 34 页换掉重跑",
+          "goal": "kdp-christmas-coloring-book",
+          "holdings": "成品 82 页、$8.99、版税约 $3.41",
+          "name": "KDP 涂色书",
+          "next": "他点头后换页+重组装，之后他本人 KDP 上传（勾 AI 声明）",
+          "progress": 95,
+          "progress_label": "第 34 页 v2 已出，等换页",
+          "status": "waiting",
+          "watch": "项目 · Colab 旁聊"
+        },
+        {
+          "chain": "Wirex 工单 #6444837",
+          "deadline": "无",
+          "detail": "Muse 不能代签",
+          "goal": "ether-fi-account-deletion-rescue",
+          "holdings": "表 PDF 已备；回信草稿已备",
+          "name": "Wirex PEP 声明",
+          "next": "须他本人填签发来，我用 jayx@muse.ai 发给 support.wirex@wirexapp.com，绝不发第二封",
+          "progress": 50,
+          "progress_label": "账户受限，等回传签好的表",
+          "status": "attention",
+          "watch": "催办信 11-24 19:18 又到"
+        },
+        {
+          "chain": "Mistral",
+          "deadline": "12-08 之后再取消（冷静期）；提醒 12-09；到期后 €17.84/月",
+          "detail": "LECHONK 盯守继续",
+          "goal": "mistral-lechonk-restock-watch",
+          "holdings": "额度 API €25.5、Vibe & Studio €255/月，1 号重置",
+          "name": "Mistral Vibe Pro",
+          "next": "12-09 提醒取消",
+          "progress": 100,
+          "progress_label": "已激活，免费至 12-24",
+          "status": "active",
+          "watch": "mistral-lechonk-restock-watch 每 10 分钟"
+        }
+      ]
+    }
+  ],
+  "closed": [
+    "蹲池机器人全线（11-22 他点选停，累计回收 $0）",
+    "Kit（11-22 结案）",
+    "GTA6 剪辑赛（11-23 不发了）",
+    "币安人生AI 新合约（已打满清仓，净赚约 0.01374 BNB）",
+    "AGENT CASH（11-22 结案）",
+    "Ember（11-21 结案）",
+    "People Chain（免费轮没抢到）",
+    "GTA AGENT",
+    "AgentLife",
+    "牛马",
+    "CrazyApe",
+    "BSC 小池套利（94 轮 0 机会）",
+    "INIT 纸面（11-23 停）",
+    "PRL 盯守（11-23 触发停守）",
+    "PandaZhai（11-19 他关）",
+    "LUMO",
+    "BoostClaim",
+    "Agent 4",
+    "PAINT",
+    "CLUCK 免费没领到",
+    "Contextgraph",
+    "AlphaPulse（截止已过）",
+    "SOAR 付费不打",
+    "WLCC / OSK（付费不推荐）",
+    "FLOP 开网盯守（11-24 测试网已上线，目标结案）"
+  ],
+  "decisions": [
+    {
+      "option_id": "widget-9ae0bcb3",
+      "since": "11-24 19:39",
+      "text": "Mac 象棋 7 进程停不停（占满 CPU，load 104/57/32）"
+    },
+    {
+      "option_id": "widget-e96e8de9",
+      "since": "11-24 19:48",
+      "text": "Wirex PEP 表签好发来"
+    },
+    {
+      "option_id": "widget-1db96d45",
+      "since": "11-21",
+      "text": "207 VPS：续费 $5.06 / 搬家"
+    },
+    {
+      "option_id": null,
+      "since": "11-22",
+      "text": "Google Calendar / Apple Health 连接"
+    },
+    {
+      "option_id": null,
+      "since": "11-20",
+      "text": "iCloud 满了：免费清空间 / 升级 2TB ₺549.99/月"
+    },
+    {
+      "option_id": null,
+      "since": "11-20",
+      "text": "KDP 第 34 页 v2 换页"
+    },
+    {
+      "option_id": null,
+      "since": "11-20",
+      "text": "Colab MCP quota project：他建项目给 ID / 或点头我来建"
+    },
+    {
+      "option_id": "widget-21edc5dc",
+      "since": "11-19",
+      "text": "Google AI Ultra 自动续费（12-18 起 $11.99/月，2027-11-18 起 $111.98/月）"
+    },
+    {
+      "option_id": "widget-9670a276",
+      "since": "11-16",
+      "text": "安全确认：11-16 晨币安/OKX 一串动作是否本人"
+    },
+    {
+      "option_id": null,
+      "since": "11-16",
+      "text": "套利发现平台总简报 A/B/C 点选"
+    },
+    {
+      "option_id": "widget-8935772b",
+      "since": "11-18",
+      "text": "F4 资金费率扫描器三选一（超时 300s / 只扫前 10 币 / 前 15 币+180s）"
+    },
+    {
+      "option_id": null,
+      "since": "11-21",
+      "text": "毫秒级/MEV：用 Mac 还是买专用服务器"
+    },
+    {
+      "option_id": null,
+      "since": "11-24",
+      "text": "FLOP：activation block 盯守 / 验证者租机"
+    },
+    {
+      "option_id": null,
+      "since": "11-24",
+      "text": "Mac 扫描器重起（原子/Taoli/ws_hub，随 11-24 14:17 重启全灭）"
+    },
+    {
+      "option_id": null,
+      "since": "11-24",
+      "text": "多链深度过滤修法加不加"
+    },
+    {
+      "option_id": null,
+      "since": "11-24",
+      "text": "Altare ws 价差监控继续跑 / 试单"
+    },
+    {
+      "option_id": null,
+      "since": "11-23",
+      "text": "BAW Solana 影子机器人停不停"
+    },
+    {
+      "option_id": null,
+      "since": "11-17",
+      "text": "Urbanova 60,000 $URBN 领不领"
+    },
+    {
+      "option_id": null,
+      "since": "11-17",
+      "text": "Parallel 接不接（MCP 补充搜索）"
+    }
+  ],
+  "source": "MEMORY.md + cron.list + 各项目聊核查，2026-11-25 凌晨快照",
+  "summary": {
+    "active": 26,
+    "closed_collapsed": 24,
+    "due_today": [
+      {
+        "text": "ZXOXO Season 1 快照（只认链上已领 mZXO，最终约 66.96）",
+        "time": "07:59"
+      },
+      {
+        "text": "AGCC 领 pos23（10:08:57 到期）+ 续挖",
+        "time": "09:55"
+      },
+      {
+        "text": "Oripa 白名单首开；bring-the-humans-03 截止 03:00 已过",
+        "time": "20:00"
+      },
+      {
+        "text": "Aura 7 天连签 +320 到账复核",
+        "time": "全天"
+      }
+    ],
+    "waiting_decision": 18
+  },
+  "updated_at": "2026-11-25 03:20 CST",
+  "version": 1
+}

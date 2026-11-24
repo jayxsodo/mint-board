@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>任务总览看板</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--card2:#1c2330;--text:#e6edf3;--muted:#8b949e;--line:#30363d;--green:#3fb950;--amber:#d29922;--orange:#f0883e;--red:#f85149;--blue:#58a6ff;--gray:#8b949e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+.wrap{max-width:860px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:22px;margin:4px 0 2px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+.sub b{color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center}
+.stat .n{font-size:22px;font-weight:700;line-height:1.1}
+.stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+.due{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:10px;padding:12px;margin-bottom:16px}
+.due h2{font-size:14px;margin-bottom:6px}
+.due li{list-style:none;padding:3px 0;font-size:14px}
+.due .t{color:var(--amber);font-weight:700;margin-right:6px}
+.toolbar{position:sticky;top:0;background:var(--bg);padding:8px 0 10px;z-index:5}
+.toolbar input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:15px;outline:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+section.cat{margin:18px 0}
+.cat>h2{font-size:17px;margin-bottom:4px;cursor:pointer}
+.cat .note{color:var(--muted);font-size:13px;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.card h3{font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.b-active{background:rgba(63,185,80,.18);color:var(--green)}
+.b-waiting{background:rgba(210,153,34,.18);color:var(--amber)}
+.b-attention{background:rgba(240,136,62,.18);color:var(--orange)}
+.b-stopped,.b-closed{background:rgba(139,148,158,.18);color:var(--gray)}
+.bar{height:6px;background:var(--line);border-radius:3px;margin:8px 0 4px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--green);border-radius:3px}
+.plabel{font-size:12px;color:var(--muted)}
+.kv{font-size:13.5px;color:var(--muted);margin-top:5px}
+.kv b{color:var(--text);font-weight:600}
+.next{font-size:14px;margin-top:7px}
+.next b{color:var(--blue)}
+.verdict{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:10px;padding:12px;margin-bottom:12px;font-size:14px}
+.nums{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.num{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12.5px}
+.num b{color:var(--text)}
+ul.plain{list-style:none}
+ul.plain li{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:14px}
+ul.plain .since{color:var(--muted);font-size:12px;margin-left:6px}
+.tag{font-size:11px;color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:1px 7px;margin-left:6px;white-space:nowrap}
+details.closed summary{cursor:pointer;font-size:16px;font-weight:700;padding:6px 0}
+details.closed li{color:var(--muted)}
+footer{color:var(--muted);font-size:12.5px;margin-top:28px;border-top:1px solid var(--line);padding-top:12px}
+.empty{display:none;color:var(--muted);text-align:center;padding:24px 0}
+@media (max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>任务总览看板</h1>
+<p class="sub">快照时间 <b id="updated"></b> · 快照版，数字不实时刷新 · 数据文件 task-board-data.json</p>
+<div class="stats" id="stats"></div>
+<div class="due" id="due"><h2>今日截止</h2><ul id="dueList"></ul></div>
+<div class="toolbar">
+<input id="q" type="search" placeholder="搜索项目名 / 关键词…" autocomplete="off">
+<div class="chips" id="chips"></div>
+</div>
+<div id="board"></div>
+<p class="empty" id="empty">没有匹配的项目，换个关键词试试。</p>
+<footer>层级：总览 → 分类 → 项目卡片（状态 / 进度 / 持仓 / 关键数字 / 下一动作 / 截止 / 盯守频率）→ 套利控制台 → 待决定事项 → 已结案。数字按明细清单统计；快照 summary 字段里的待决定 18 项 / 已结案 24 项与明细（19 / 25）不一致，以明细为准。</footer>
+</div>
+<script>
+const STATUS = {active:['进行中','b-active'],waiting:['等他定','b-waiting'],attention:['需注意','b-attention'],stopped:['已停','b-stopped'],closed:['已结案','b-closed']};
+let DATA=null, filter='all';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function badge(st,label){const m=STATUS[st]||['','b-closed'];return `<span class="badge ${m[1]}">${esc(label||m[0])}</span>`;}
+function progress(p){if(typeof p.progress==='number')return `<div class="bar"><i style="width:${Math.max(0,Math.min(100,p.progress))}%"></i></div><div class="plabel">${esc(p.progress_label||p.progress+'%')}</div>`;return p.progress_label?`<div class="plabel">${esc(p.progress_label)}</div>`:'';}
+function card(p){return `<div class="card" data-status="${esc(p.status)}" data-text="${esc((p.name+' '+(p.detail||'')+' '+(p.next||'')).toLowerCase())}">
+<h3>${esc(p.name)} ${badge(p.status,p.status_label)}${p.chain?`<span class="plabel">${esc(p.chain)}</span>`:''}</h3>
+${progress(p)}
+${p.holdings?`<div class="kv">持仓：<b>${esc(p.holdings)}</b></div>`:''}
+${p.detail?`<div class="kv">${esc(p.detail)}</div>`:''}
+${p.next?`<div class="next">下一动作：<b>${esc(p.next)}</b></div>`:''}
+${p.deadline?`<div class="kv">截止：${esc(p.deadline)}</div>`:''}
+${p.watch?`<div class="kv">盯守：${esc(p.watch)}</div>`:''}
+</div>`;}
+function render(){
+  const q=(document.getElementById('q').value||'').trim().toLowerCase();
+  let shown=0;
+  document.querySelectorAll('#board .card').forEach(c=>{
+    const okStatus=filter==='all'||c.dataset.status===filter;
+    const okQ=!q||c.dataset.text.includes(q);
+    const show=okStatus&&okQ; c.style.display=show?'':'none'; if(show)shown++;
+  });
+  document.querySelectorAll('#board section.cat').forEach(s=>{
+    const any=[...s.querySelectorAll('.card')].some(c=>c.style.display!=='none');
+    s.style.display=(any||!q&&filter==='all')?'':'none';
+  });
+  document.getElementById('empty').style.display=shown?'none':'block';
+}
+function build(){
+  document.getElementById('updated').textContent=DATA.updated_at||'';
+  const cats=DATA.categories;
+  const nP=cats.reduce((a,c)=>a+c.projects.length,0);
+  const nA=cats.reduce((a,c)=>a+c.projects.filter(p=>p.status==='active').length,0);
+  const nW=cats.reduce((a,c)=>a+c.projects.filter(p=>p.status==='waiting').length,0);
+  const nT=cats.reduce((a,c)=>a+c.projects.filter(p=>p.status==='attention').length,0);
+  document.getElementById('stats').innerHTML=[
+    [nP,'项目总数'],[nA,'进行中'],[DATA.decisions.length,'待决定'],[DATA.arbitrage.lines.length,'套利线'],
+    [nW,'等他定'],[nT,'需注意'],[DATA.closed.length,'已结案'],[(DATA.summary.due_today||[]).length,'今日截止']
+  ].map(([n,l])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+  document.getElementById('dueList').innerHTML=(DATA.summary.due_today||[]).map(d=>`<li><span class="t">${esc(d.time)}</span>${esc(d.text)}</li>`).join('');
+  const chips=[['all','全部'],['active','进行中'],['waiting','等他定'],['attention','需注意'],['stopped','已停']];
+  document.getElementById('chips').innerHTML=chips.map(([v,l])=>`<button class="chip${v==='all'?' on':''}" data-v="${v}">${l}</button>`).join('');
+  document.getElementById('chips').addEventListener('click',e=>{
+    const b=e.target.closest('.chip'); if(!b)return; filter=b.dataset.v;
+    document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b)); render();
+  });
+  document.getElementById('q').addEventListener('input',render);
+  let h='';
+  cats.forEach(c=>{h+=`<section class="cat"><h2>${esc(c.name)}（${c.projects.length}）</h2>${c.note?`<div class="note">${esc(c.note)}</div>`:''}${c.projects.map(card).join('')}</section>`;});
+  const a=DATA.arbitrage;
+  h+=`<section class="cat"><h2>套利控制台（${a.lines.length} 条）</h2><div class="verdict">${esc(a.verdict||'')}</div>`+
+    a.lines.map(l=>`<div class="card" data-status="${esc(l.status)}" data-text="${esc((l.name+' '+(l.detail||'')).toLowerCase())}">
+<h3>${esc(l.name)} ${badge(l.status,l.status_label)}${l.updated?`<span class="plabel">${esc(l.updated)}</span>`:''}</h3>
+${l.numbers?`<div class="nums">${Object.entries(l.numbers).map(([k,v])=>`<span class="num">${esc(k)}：<b>${esc(v)}</b></span>`).join('')}</div>`:''}
+${l.detail?`<div class="kv">${esc(l.detail)}</div>`:''}
+${l.next?`<div class="next">下一动作：<b>${esc(l.next)}</b></div>`:''}
+</div>`).join('')+'</section>';
+  h+=`<section class="cat"><h2>待决定事项（${DATA.decisions.length}）</h2><ul class="plain">`+
+    DATA.decisions.map(d=>`<li>${esc(d.text)}<span class="since">${esc(d.since||'')}</span>${d.option_id?'<span class="tag">已发选项卡，等点选</span>':''}</li>`).join('')+'</ul></section>';
+  h+=`<section class="cat"><details class="closed"><summary>已结案（${DATA.closed.length}）</summary><ul class="plain" style="margin-top:10px">`+
+    DATA.closed.map(c=>`<li>${esc(c)}</li>`).join('')+'</ul></details></section>';
+  document.getElementById('board').innerHTML=h;
+  render();
+}
+fetch('task-board-data.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(d=>{DATA=d;build();}).catch(e=>{
+  document.getElementById('board').innerHTML='<p style="color:#f85149">数据文件加载失败：'+esc(e.message)+'。请确认 task-board-data.json 与本页在同一目录。</p>';
+});
+</script>
+</body>
+</html>
