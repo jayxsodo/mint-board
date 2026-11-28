@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "updatedAt": "2026-11-21T23:59:12+08:00",
+    "updatedAt": "2026-11-28T18:32:24+08:00",
     "projects": [
         {
             "id": "fairbnb",
@@ -197,6 +197,21 @@
             "endAt": "2026-11-22T22:38:21+08:00",
             "progressFn": "totalLotsMinted",
             "openedFn": "poolOpen",
+            "sync": true
+        },
+        {
+            "id": "spacexcoin",
+            "name": "SpaceXCoin",
+            "token": "0xe34F70EECe2aa5A8f8EAc799b741043868786951",
+            "sale": "0x41C5159E2D2d0434F2F0bE08204ceFC4F524A3d1",
+            "pricePerShare": 0.004,
+            "tokensPerShare": 80000000,
+            "totalShares": 10000,
+            "taxPct": 2,
+            "startAt": "",
+            "endAt": "",
+            "progressFn": "totalMinted",
+            "openedFn": "opened",
             "sync": true
         }
     ]
